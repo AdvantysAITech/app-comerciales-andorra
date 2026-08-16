@@ -30,7 +30,7 @@ export default function Login() {
   return (
     <main className="grid min-h-dvh place-items-center px-6">
       <div className="w-full max-w-sm">
-        <p className="traza">Sistema Advantys · RF-16</p>
+        <p className="traza">Sistema Advantys</p>
         <h1 className="mt-2 mb-8 text-2xl font-semibold tracking-tight">App Comercial</h1>
 
         <div className="space-y-4 border border-line bg-surface p-6">

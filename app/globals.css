@@ -1,18 +1,31 @@
 @import "tailwindcss";
 
 @theme {
-  --color-canvas: #e9edf1;
-  --color-surface: #ffffff;
-  --color-ink: #10191f;
-  --color-muted: #5c6b76;
-  --color-line: #ccd5dd;
-  --color-accent: #0f5257;
-  --color-accent-soft: #e0ecec;
-  --color-block: #8a3324;
-  --color-block-soft: #f7e9e6;
+  /* Paleta Advantys — espejo de assets/css/base/variables.css de la web */
+  --color-canvas: #090d16;
+  --color-surface: #12172a;
+  --color-header: rgba(2, 6, 23, 0.8);
 
-  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+  --color-ink: #ffffff;
+  --color-muted: #a1a1aa;
+  --color-faint: #71717a;
+
+  --color-line: rgba(39, 39, 42, 0.6);
+  --color-line-hover: rgba(255, 107, 67, 0.3);
+
+  --color-accent: #ff6b43;
+  --color-accent-soft: rgba(255, 107, 67, 0.1);
+
+  --color-block: #e24b4a;
+  --color-block-text: #f09595;
+  --color-block-soft: rgba(226, 75, 74, 0.08);
+
+  --color-brand-red: #ff3935;
+  --color-brand-orange: #e49166;
+
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-heading), ui-sans-serif, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 @layer base {
@@ -20,6 +33,10 @@
     background: var(--color-canvas);
     color: var(--color-ink);
     font-family: var(--font-sans);
+  }
+  h1, h2 {
+    font-family: var(--font-heading);
+    letter-spacing: -0.02em;
   }
   :focus-visible {
     outline: 2px solid var(--color-accent);
@@ -34,68 +51,88 @@
 }
 
 @layer components {
-  /* Traza DERCAS: cada bloque de la interfaz declara qué requerimiento cumple.
-     No es decoración, es lo que te deja validar la app contra el documento. */
+  /* Etiqueta pequeña de sección, en monoespaciada. */
   .traza {
     font-family: var(--font-mono);
     font-size: 0.6875rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--color-muted);
+    color: var(--color-faint);
   }
 
   .etiqueta {
     display: block;
     font-size: 0.8125rem;
-    font-weight: 500;
+    color: var(--color-muted);
     margin-bottom: 0.375rem;
   }
 
   .campo {
     width: 100%;
-    background: var(--color-surface);
+    background: var(--color-canvas);
     border: 1px solid var(--color-line);
+    border-radius: 8px;
     padding: 0.5rem 0.6875rem;
     font-size: 0.9375rem;
     line-height: 1.5;
+    color: var(--color-ink);
+    transition: border-color 150ms ease;
   }
+  .campo::placeholder { color: var(--color-faint); }
+  .campo:hover { border-color: var(--color-line-hover); }
   .campo:focus {
     border-color: var(--color-accent);
     outline: none;
-    box-shadow: inset 0 -2px 0 var(--color-accent);
   }
-  .campo[aria-invalid="true"] {
-    border-color: var(--color-block);
-  }
+  .campo[aria-invalid="true"] { border-color: var(--color-block); }
 
+  /* Degradado de marca: solo en la acción principal de cada pantalla. */
   .boton {
-    background: var(--color-accent);
-    color: #fff;
+    background: linear-gradient(
+      to right,
+      var(--color-brand-red),
+      var(--color-accent),
+      var(--color-brand-orange)
+    );
+    color: #ffffff;
     font-size: 0.9375rem;
     font-weight: 500;
-    padding: 0.625rem 1.25rem;
-    border: 1px solid var(--color-accent);
-    transition: opacity 120ms ease;
+    padding: 0.5625rem 1.25rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: opacity 150ms ease;
   }
   .boton:hover:not(:disabled) { opacity: 0.88; }
-  .boton:disabled { opacity: 0.45; cursor: not-allowed; }
+  .boton:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .boton-fantasma {
     background: transparent;
-    color: var(--color-ink);
+    color: var(--color-muted);
     border: 1px solid var(--color-line);
+    border-radius: 8px;
     font-size: 0.875rem;
-    padding: 0.5rem 0.9375rem;
+    padding: 0.4375rem 0.8125rem;
+    cursor: pointer;
+    transition: all 150ms ease;
   }
+  .boton-fantasma:hover { border-color: var(--color-line-hover); }
   .boton-fantasma[data-activo="true"] {
-    border-color: var(--color-accent);
+    border-color: var(--color-line-hover);
     background: var(--color-accent-soft);
     color: var(--color-accent);
   }
 
   .error {
-    color: var(--color-block);
+    color: var(--color-block-text);
     font-size: 0.8125rem;
     margin-top: 0.25rem;
+  }
+
+  /* Tarjeta base de sección */
+  .panel {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
   }
 }

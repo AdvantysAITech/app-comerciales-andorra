@@ -54,7 +54,7 @@ export default async function MisLeads() {
               </div>
               <div className="shrink-0 text-right">
                 {lead.resultado === "bloqueado_wf16" && (
-                  <span className="traza text-block">Bloqueado · WF-16</span>
+                  <span className="traza text-block">Bloqueado</span>
                 )}
                 {lead.resultado === "error" && (
                   <span className="traza text-block">No guardado</span>
