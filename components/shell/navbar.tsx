@@ -7,12 +7,11 @@
  * Los módulos con `disponible: false` se pintan apagados y no navegan — sirven para
  * mostrar la forma final de la plataforma sin tener que construirlos todos hoy.
  */
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut } from "lucide-react";
 import { agruparModulos, type Modulo } from "@/lib/modulos";
 import { ICONOS } from "@/components/shell/iconos";
+import { LogoAdvantys } from "@/components/shell/logo-advantys";
 
 type Props = {
   modulos: Modulo[];
@@ -21,6 +20,7 @@ type Props = {
 
 export function Navbar({ modulos, usuario }: Props) {
   const pathname = usePathname();
+  const enPerfil = pathname.startsWith("/perfil");
 
   return (
     <nav className="flex h-full w-60 shrink-0 flex-col border-r border-linea bg-panel">
@@ -29,15 +29,8 @@ export function Navbar({ modulos, usuario }: Props) {
         aria-label="Inicio"
         className="flex h-16 shrink-0 items-center px-5 text-tinta"
       >
-        {/* El logo es SVG con currentColor en "Ai": hereda text-tinta y sirve en claro y en oscuro. */}
-        <Image
-          src="/logo-advantys.svg"
-          alt="Advantys Ai"
-          width={140}
-          height={25}
-          priority
-          className="h-[22px] w-auto"
-        />
+        {/* El "Ai" del logo va en currentColor: hereda text-tinta y sirve en claro y en oscuro. */}
+        <LogoAdvantys className="h-[22px] w-auto" />
       </Link>
 
       <div className="flex-1 overflow-y-auto px-3 pt-1">
@@ -96,10 +89,16 @@ export function Navbar({ modulos, usuario }: Props) {
         ))}
       </div>
 
+      {/* El pie ya no lleva "Cerrar sesión": vive en /perfil, junto al resto de
+          ajustes de cuenta. Aquí solo queda la entrada a esa pantalla. */}
       <div className="shrink-0 border-t border-linea p-3">
         <Link
           href="/perfil"
-          className="flex items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-elevado"
+          aria-current={enPerfil ? "page" : undefined}
+          className={
+            "flex items-center gap-3 rounded-md px-3 py-2 transition-colors " +
+            (enPerfil ? "bg-elevado" : "hover:bg-elevado")
+          }
         >
           <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-linea bg-elevado text-[11px] font-medium text-tinta">
             {iniciales(usuario.nombre)}
@@ -113,17 +112,6 @@ export function Navbar({ modulos, usuario }: Props) {
             </span>
           </span>
         </Link>
-
-        {/* Cierre de sesión por POST: un GET podría dispararlo un prefetch del navegador. */}
-        <form action="/auth/logout" method="post">
-          <button
-            type="submit"
-            className="mt-px flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-tinta-media transition-colors hover:bg-elevado hover:text-tinta"
-          >
-            <LogOut className="size-4 shrink-0" aria-hidden />
-            Cerrar sesión
-          </button>
-        </form>
       </div>
     </nav>
   );

@@ -1,4 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 7632 1350" role="img" aria-label="Advantys Ai">
+/**
+ * Logotipo Advantys como SVG en linea.
+ *
+ * El bloque "advantys" lleva el degradado corporativo fijo; el bloque "Ai" usa
+ * currentColor, asi que hereda el color del texto del contenedor. Un unico fichero
+ * sirve para tema claro y oscuro: basta con ponerle text-tinta.
+ *
+ * Las variantes estaticas /logo-advantys-negro.svg y /logo-advantys-blanco.svg
+ * quedan en public/ para lo que no es React: favicon, firmas de email, Open Graph.
+ */
+type Props = {
+  className?: string;
+  /** Texto alternativo. Pon "" si el logo es decorativo y ya hay texto al lado. */
+  titulo?: string;
+};
+
+export function LogoAdvantys({ className, titulo = "Advantys Ai" }: Props) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 7632 1350"
+      className={className}
+      role={titulo ? "img" : "presentation"}
+      aria-label={titulo || undefined}
+      aria-hidden={titulo ? undefined : true}
+    >
 <defs>
 <linearGradient id="advantys-degradado" x1="0" y1="0" x2="1" y2="0">
 <stop offset="0" stop-color="#FE3633"/>
@@ -124,4 +149,6 @@ M47220 10681 c0 -38 105 -307 482 -1236 991 -2441 1529 -3755 1953 -4770 267
 -539 22 -456 0 -514 -2 -541 -16z"/>
 </g>
 </g>
-</svg>
+    </svg>
+  );
+}

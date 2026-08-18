@@ -1,104 +1,183 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-/*@import "shadcn/tailwind.css";*/
 
-@custom-variant dark (&:is(.dark *));
+/* La variante `dark:` se activa con la clase .dark en <html>, puesta por el
+   ProveedorTema (y por el script anti-parpadeo antes de que hidrate React). */
+@custom-variant dark (&:where(.dark, .dark *));
 
-@theme {
-  --font-sans: var(--fuente-sans), ui-sans-serif, system-ui, sans-serif;
-
-  /* Grises calidos, no negro puro: menos fatiga y los bordes se leen mejor. */
-  --color-lienzo: #1a1a1c;
-  --color-panel: #202024;
-  --color-elevado: #2a2a2f;
-  --color-linea: #35353b;
-  --color-campo: #141416;
-
-  /* Blanco roto ligeramente calido, para que no vibre sobre el gris. */
-  --color-tinta: #ece9e4;
-  --color-tinta-media: #a5a29d;
-  --color-tinta-tenue: #6d6a67;
-}
-
+/* ────────────────────────────────────────────────────────────────────────────
+   1. PALETA
+   Un unico juego de nombres. Solo cambian los valores entre claro y oscuro,
+   asi que ninguna pantalla necesita clases `dark:` para los colores base.
+   Neutros calidos, no grises puros: menos fatiga y los bordes se leen mejor.
+   ──────────────────────────────────────────────────────────────────────────── */
 :root {
+  color-scheme: light;
+
+  --lienzo: #faf9f7; /* fondo de la aplicacion */
+  --panel: #ffffff; /* barra lateral, tarjetas */
+  --elevado: #f1efea; /* hover, chips, estado activo */
+  --linea: #e5e1d9; /* bordes y separadores */
+  --campo: #ffffff; /* fondo de inputs */
+
+  --tinta: #1f1e1d; /* texto principal */
+  --tinta-media: #6b6862; /* texto secundario, etiquetas */
+  --tinta-tenue: #9a958c; /* texto terciario, placeholders */
+
+  --acento: #d43f2a; /* rojo Advantys legible sobre blanco */
+  --acento-suave: #fdf1ee; /* fondo de avisos en tono marca */
+  --bloqueo: #b3261e; /* errores y bloqueos */
+
+  --radio: 8px;
+}
+
+.dark {
   color-scheme: dark;
-  --background: #1a1a1c;
-  --foreground: #ece9e4;
-  --card: #202024;
-  --card-foreground: #ece9e4;
-  --popover: #202024;
-  --popover-foreground: #ece9e4;
-  --primary: #ece9e4;
-  --primary-foreground: #1a1a1c;
-  --secondary: #2a2a2f;
-  --secondary-foreground: #ece9e4;
-  --muted: #2a2a2f;
-  --muted-foreground: #a5a29d;
-  --accent: #2a2a2f;
-  --accent-foreground: #ece9e4;
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: #35353b;
-  --input: #35353b;
-  --ring: #6d6a67;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: #202024;
-  --sidebar-foreground: #ece9e4;
-  --sidebar-primary: #ece9e4;
-  --sidebar-primary-foreground: #1a1a1c;
-  --sidebar-accent: #2a2a2f;
-  --sidebar-accent-foreground: #ece9e4;
-  --sidebar-border: #35353b;
-  --sidebar-ring: #6d6a67;
+
+  --lienzo: #1a1a1c;
+  --panel: #202024;
+  --elevado: #2a2a2f;
+  --linea: #35353b;
+  --campo: #141416;
+
+  --tinta: #ece9e4;
+  --tinta-media: #a5a29d;
+  --tinta-tenue: #6d6a67;
+
+  --acento: #fe6b4a;
+  --acento-suave: #2c211d;
+  --bloqueo: #f4776a;
 }
 
-body {
-  background-color: var(--color-lienzo);
-  color: var(--color-tinta);
+/* ────────────────────────────────────────────────────────────────────────────
+   2. TOKENS DE TAILWIND
+   `@theme inline` hace que las utilidades apunten a la variable, no a su valor:
+   por eso bg-lienzo o text-tinta cambian solos al alternar el tema.
+   Se mantienen los nombres antiguos (lienzo, panel, elevado, linea, tinta…)
+   para no tener que tocar las pantallas ya escritas.
+   ──────────────────────────────────────────────────────────────────────────── */
+@theme inline {
+  --font-sans: var(--fuente-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+
+  --color-lienzo: var(--lienzo);
+  --color-panel: var(--panel);
+  --color-elevado: var(--elevado);
+  --color-linea: var(--linea);
+  --color-campo: var(--campo);
+
+  --color-tinta: var(--tinta);
+  --color-tinta-media: var(--tinta-media);
+  --color-tinta-tenue: var(--tinta-tenue);
+
+  --color-acento: var(--acento);
+  --color-acento-suave: var(--acento-suave);
+  --color-bloqueo: var(--bloqueo);
+
+  /* Alias en ingles que ya usan algunas pantallas heredadas. */
+  --color-surface: var(--panel);
+  --color-line: var(--linea);
+  --color-accent: var(--acento);
+  --color-accent-soft: var(--acento-suave);
+  --color-block: var(--bloqueo);
+
+  /* Alias que espera shadcn/ui (components/ui/button.tsx y lo que venga). */
+  --color-background: var(--lienzo);
+  --color-foreground: var(--tinta);
+  --color-card: var(--panel);
+  --color-card-foreground: var(--tinta);
+  --color-popover: var(--panel);
+  --color-popover-foreground: var(--tinta);
+  --color-primary: var(--tinta);
+  --color-primary-foreground: var(--lienzo);
+  --color-secondary: var(--elevado);
+  --color-secondary-foreground: var(--tinta);
+  --color-muted: var(--elevado);
+  --color-muted-foreground: var(--tinta-media);
+  --color-accent-foreground: var(--tinta);
+  --color-destructive: var(--bloqueo);
+  --color-border: var(--linea);
+  --color-input: var(--linea);
+  --color-ring: var(--tinta-tenue);
+  --color-sidebar: var(--panel);
+  --color-sidebar-foreground: var(--tinta);
+  --color-sidebar-border: var(--linea);
+  --color-sidebar-accent: var(--elevado);
+  --color-sidebar-accent-foreground: var(--tinta);
+
+  --radius-sm: calc(var(--radio) * 0.6);
+  --radius-md: calc(var(--radio) * 0.8);
+  --radius-lg: var(--radio);
+  --radius-xl: calc(var(--radio) * 1.4);
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+   3. BASE
+   Los controles se estilan por elemento y no por clase: cualquier formulario
+   nuevo queda legible sin repasarlo campo a campo.
+   ──────────────────────────────────────────────────────────────────────────── */
 @layer base {
-  /* Los controles se estilan por elemento y no por clase: asi cualquier formulario
-     de la plataforma queda legible sin tocarlo campo a campo. */
+  * {
+    border-color: var(--linea);
+  }
+
+  html {
+    font-family: var(--font-sans);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--lienzo);
+    color: var(--tinta);
+    letter-spacing: -0.011em;
+    /* El cambio de tema no debe ser un fogonazo, pero tampoco una transicion larga. */
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.022em;
+    text-wrap: balance;
+  }
+
   input:not([type="checkbox"]):not([type="radio"]),
   select,
   textarea {
     width: 100%;
-    background-color: var(--color-campo);
-    border: 1px solid var(--color-linea);
-    border-radius: 6px;
+    background-color: var(--campo);
+    border: 1px solid var(--linea);
+    border-radius: var(--radio);
     padding: 0.5rem 0.75rem;
     font-size: 0.875rem;
-    color: var(--color-tinta);
-    transition: border-color 0.12s ease;
+    font-family: inherit;
+    color: var(--tinta);
+    transition:
+      border-color 0.12s ease,
+      background-color 0.12s ease;
   }
 
   input:hover,
   select:hover,
   textarea:hover {
-    border-color: #45454d;
+    border-color: color-mix(in oklab, var(--linea), var(--tinta) 22%);
   }
 
   input:focus,
   select:focus,
   textarea:focus {
     outline: none;
-    border-color: var(--color-tinta-media);
+    border-color: var(--tinta-media);
   }
 
-  ::placeholder {
-    color: var(--color-tinta-tenue);
-  }
-
-  label {
-    display: block;
-    margin-bottom: 0.375rem;
-    font-size: 0.8125rem;
-    color: var(--color-tinta-media);
+  input:disabled,
+  select:disabled,
+  textarea:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
   }
 
   textarea {
@@ -106,140 +185,143 @@ body {
     resize: vertical;
   }
 
+  ::placeholder {
+    color: var(--tinta-tenue);
+  }
+
+  label {
+    display: block;
+    margin-bottom: 0.375rem;
+    font-size: 0.8125rem;
+    color: var(--tinta-media);
+  }
+
   button {
     cursor: pointer;
+    font-family: inherit;
+    color: inherit;
   }
-  * {
-    @apply border-border outline-ring/50;
+
+  :focus-visible {
+    outline: 1px solid var(--tinta-media);
+    outline-offset: 2px;
   }
-  body {
-    @apply bg-background text-foreground;
+
+  ::selection {
+    background-color: var(--tinta);
+    color: var(--lienzo);
   }
-  html {
-    @apply font-sans;
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--linea);
+    border: 3px solid var(--lienzo);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--tinta-tenue);
   }
 }
 
-:focus-visible {
-  outline: 1px solid var(--color-tinta-media);
-  outline-offset: 2px;
-}
+/* ────────────────────────────────────────────────────────────────────────────
+   4. COMPONENTES
+   Estas clases las usan el login, el alta de lead y el asistente. Estaban
+   definidas en una version anterior de este fichero y se perdieron al
+   sustituirlo: por eso esas pantallas se veian sin estilo. Aqui vuelven, ya
+   con los tokens de los dos temas.
+   ──────────────────────────────────────────────────────────────────────────── */
+@layer components {
+  /* Rotulo pequeno en versalitas para encabezar bloques. */
+  .traza {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--tinta-tenue);
+  }
 
-::selection {
-  background-color: var(--color-tinta);
-  color: var(--color-lienzo);
-}
+  .etiqueta {
+    display: block;
+    margin-bottom: 0.375rem;
+    font-size: 0.8125rem;
+    color: var(--tinta-media);
+  }
 
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-thumb {
-  background-color: var(--color-linea);
-  border: 3px solid var(--color-lienzo);
-  border-radius: 999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background-color: #45454d;
-}
+  .campo {
+    width: 100%;
+    background-color: var(--campo);
+    border: 1px solid var(--linea);
+    border-radius: var(--radio);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    color: var(--tinta);
+  }
 
-@theme inline {
-  --font-heading: var(--font-sans);
-  --font-sans: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --color-foreground: var(--foreground);
-  --color-background: var(--background);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
-}
+  .error {
+    margin-top: 0.375rem;
+    font-size: 0.8125rem;
+    color: var(--bloqueo);
+  }
 
-.dark {
-  --background: #1a1a1c;
-  --foreground: #ece9e4;
-  --card: #202024;
-  --card-foreground: #ece9e4;
-  --popover: #202024;
-  --popover-foreground: #ece9e4;
-  --primary: #ece9e4;
-  --primary-foreground: #1a1a1c;
-  --secondary: #2a2a2f;
-  --secondary-foreground: #ece9e4;
-  --muted: #2a2a2f;
-  --muted-foreground: #a5a29d;
-  --accent: #2a2a2f;
-  --accent-foreground: #ece9e4;
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: #35353b;
-  --input: #35353b;
-  --ring: #6d6a67;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: #202024;
-  --sidebar-foreground: #ece9e4;
-  --sidebar-primary: #ece9e4;
-  --sidebar-primary-foreground: #1a1a1c;
-  --sidebar-accent: #2a2a2f;
-  --sidebar-accent-foreground: #ece9e4;
-  --sidebar-border: #35353b;
-  --sidebar-ring: #6d6a67;
-}
+  .boton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 2.25rem;
+    padding: 0 1rem;
+    border: 1px solid transparent;
+    border-radius: var(--radio);
+    background-color: var(--tinta);
+    color: var(--lienzo);
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition:
+      opacity 0.12s ease,
+      background-color 0.12s ease;
+  }
+  .boton:hover:not(:disabled) {
+    opacity: 0.86;
+  }
+  .boton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 
-h1, h2, h3, h4, h5, h6,
-p, span, div, dt, dd, li, a, strong, small {
-  color: var(--color-tinta) !important;
-}
+  .boton-fantasma {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 2.25rem;
+    padding: 0 1rem;
+    border: 1px solid var(--linea);
+    border-radius: var(--radio);
+    background-color: transparent;
+    color: var(--tinta);
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition:
+      background-color 0.12s ease,
+      border-color 0.12s ease;
+  }
+  .boton-fantasma:hover:not(:disabled) {
+    background-color: var(--elevado);
+  }
+  .boton-fantasma[aria-pressed="true"],
+  .boton-fantasma[data-activo="true"] {
+    border-color: var(--tinta);
+    background-color: var(--elevado);
+  }
 
-.text-tinta-media,
-.text-muted-foreground {
-  color: var(--color-tinta-media) !important;
+  /* Tarjeta neutra: la unidad de composicion de toda la plataforma. */
+  .tarjeta {
+    border: 1px solid var(--linea);
+    border-radius: calc(var(--radio) * 1.5);
+    background-color: var(--panel);
+    padding: 1.5rem;
+  }
 }
-
-.text-tinta-tenue {
-  color: var(--color-tinta-tenue) !important;
-}
-
-button {
-  color: inherit;
-}
-
-.bg-tinta   { background-color: var(--color-tinta) !important; }
-.text-lienzo{ color: var(--color-lienzo) !important; }
-.bg-panel   { background-color: var(--color-panel) !important; }
-.bg-elevado { background-color: var(--color-elevado) !important; }
-.border-linea { border-color: var(--color-linea) !important; }
