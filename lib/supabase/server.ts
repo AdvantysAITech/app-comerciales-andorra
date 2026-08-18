@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 
 export async function supabaseServer() {
   const cookieStore = await cookies();
+
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -12,18 +13,15 @@ export async function supabaseServer() {
         getAll: () => cookieStore.getAll(),
         setAll: (items) => {
           try {
-            items.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+            items.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options),
+            );
           } catch {
-            // Llamado desde un Server Component: el middleware ya refresca la sesión.
+            // Llamado desde un Server Component, donde las cookies son de solo lectura.
+            // No es un fallo: el middleware ya se encarga de refrescar la sesion.
           }
         },
       },
     },
   );
-}
-
-export async function usuarioActual() {
-  const supabase = await supabaseServer();
-  const { data } = await supabase.auth.getUser();
-  return data.user;
 }
