@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { listarSpinoffs } from "@/lib/ghl/spinoffs";
-import { usuarioActual } from "@/lib/supabase/server";
+import { getUsuarioSesion } from '@/lib/supabase/route-auth'
 
 export async function GET() {
-  if (!(await usuarioActual())) {
+  if (!(await getUsuarioSesion())) {
     return NextResponse.json({ error: "Sesión caducada" }, { status: 401 });
   }
 

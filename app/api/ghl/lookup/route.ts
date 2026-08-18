@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { buscarContacto } from "@/lib/ghl/contactos";
 import { tieneConflictoIndependencia } from "@/lib/ghl/oportunidades";
-import { usuarioActual } from "@/lib/supabase/server";
+import { getUsuarioSesion } from "@/lib/supabase/route-auth";
 
 /** Aviso orientativo mientras el comercial rellena. La validación real es POST /api/leads. */
 export async function GET(request: Request) {
-  if (!(await usuarioActual())) {
+  if (!(await getUsuarioSesion())) {
     return NextResponse.json({ error: "Sesión caducada" }, { status: 401 });
   }
 
