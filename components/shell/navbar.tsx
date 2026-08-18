@@ -1,0 +1,136 @@
+"use client";
+
+/**
+ * Navegación lateral de la Plataforma Advantys.
+ *
+ * No consulta permisos: recibe ya filtrados los módulos que este usuario puede ver.
+ * Los módulos con `disponible: false` se pintan apagados y no navegan — sirven para
+ * mostrar la forma final de la plataforma sin tener que construirlos todos hoy.
+ */
+import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { LogOut } from "lucide-react";
+import { agruparModulos, type Modulo } from "@/lib/modulos";
+import { ICONOS } from "@/components/shell/iconos";
+
+type Props = {
+  modulos: Modulo[];
+  usuario: { nombre: string; email: string };
+};
+
+export function Navbar({ modulos, usuario }: Props) {
+  const pathname = usePathname();
+
+  return (
+    <nav className="flex h-full w-60 shrink-0 flex-col border-r border-linea bg-panel">
+      <Link
+        href="/"
+        aria-label="Inicio"
+        className="flex h-16 shrink-0 items-center px-5 text-tinta"
+      >
+        {/* El logo es SVG con currentColor en "Ai": hereda text-tinta y sirve en claro y en oscuro. */}
+        <Image
+          src="/logo-advantys.svg"
+          alt="Advantys Ai"
+          width={140}
+          height={25}
+          priority
+          className="h-[22px] w-auto"
+        />
+      </Link>
+
+      <div className="flex-1 overflow-y-auto px-3 pt-1">
+        {agruparModulos(modulos).map((grupo) => (
+          <div key={grupo.etiqueta} className="mb-4">
+            <p className="px-2 pb-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-tinta-tenue">
+              {grupo.etiqueta}
+            </p>
+            <ul className="space-y-px">
+              {grupo.modulos.map((modulo) => {
+                const Icono = ICONOS[modulo.clave];
+                const activo =
+                  pathname === modulo.ruta ||
+                  pathname.startsWith(modulo.ruta + "/");
+
+                if (!modulo.disponible) {
+                  return (
+                    <li key={modulo.clave}>
+                      <span
+                        title="Disponible más adelante"
+                        className="flex cursor-default items-center gap-3 rounded-md px-3 py-2 text-sm text-tinta-tenue"
+                      >
+                        <Icono className="size-4 shrink-0" aria-hidden />
+                        {modulo.nombre}
+                      </span>
+                    </li>
+                  );
+                }
+
+                return (
+                  <li key={modulo.clave}>
+                    <Link
+                      href={modulo.ruta}
+                      aria-current={activo ? "page" : undefined}
+                      className={
+                        "relative flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors " +
+                        (activo
+                          ? "bg-elevado font-medium text-tinta"
+                          : "text-tinta-media hover:bg-elevado/60 hover:text-tinta")
+                      }
+                    >
+                      {activo && (
+                        <span
+                          aria-hidden
+                          className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-tinta"
+                        />
+                      )}
+                      <Icono className="size-4 shrink-0" aria-hidden />
+                      {modulo.nombre}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </div>
+
+      <div className="shrink-0 border-t border-linea p-3">
+        <Link
+          href="/perfil"
+          className="flex items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-elevado"
+        >
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-linea bg-elevado text-[11px] font-medium text-tinta">
+            {iniciales(usuario.nombre)}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-sm text-tinta">
+              {usuario.nombre}
+            </span>
+            <span className="block truncate text-xs text-tinta-tenue">
+              {usuario.email}
+            </span>
+          </span>
+        </Link>
+
+        {/* Cierre de sesión por POST: un GET podría dispararlo un prefetch del navegador. */}
+        <form action="/auth/logout" method="post">
+          <button
+            type="submit"
+            className="mt-px flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-tinta-media transition-colors hover:bg-elevado hover:text-tinta"
+          >
+            <LogOut className="size-4 shrink-0" aria-hidden />
+            Cerrar sesión
+          </button>
+        </form>
+      </div>
+    </nav>
+  );
+}
+
+function iniciales(nombre: string): string {
+  const partes = nombre.trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return "?";
+  return (partes[0][0] + (partes[1]?.[0] ?? "")).toUpperCase();
+}

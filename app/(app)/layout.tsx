@@ -1,33 +1,24 @@
-import Link from "next/link";
-import { usuarioActual } from "@/lib/supabase/server";
-import CerrarSesion from "@/app/(app)/components/cerrar-sesion";
 import { redirect } from "next/navigation";
+import { Navbar } from "@/components/shell/navbar";
+import { sesionActual } from "@/lib/permisos";
 
-const user = await usuarioActual();
+export default async function LayoutApp({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const sesion = await sesionActual();
 
-  // Defensa en profundidad: el middleware ya redirige, pero no se delega
-  // la autorización a una sola capa.
-if (!user) redirect("/login");
-
-export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const user = await usuarioActual();
+  // Defensa en profundidad: el middleware ya filtra, pero si alguien pierde el perfil
+  // o se le desactiva mientras tiene sesion abierta, aqui se corta igualmente.
+  if (!sesion) redirect("/login");
 
   return (
-    <div className="min-h-dvh">
-      <header className="border-b border-line bg-header backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-6 py-3">
-          <Link href="/leads" className="text-sm font-semibold tracking-tight">
-            Advantys · App Comercial
-          </Link>
-          <nav className="flex items-center gap-5 text-sm">
-            <Link href="/leads/nuevo" className="hover:text-accent">Nuevo lead</Link>
-            <Link href="/leads" className="hover:text-accent">Mis leads</Link>
-            <span className="traza hidden sm:inline">{user?.email}</span>
-            <CerrarSesion />
-          </nav>
-        </div>
-      </header>
-      <main className="mx-auto max-w-3xl px-6 py-10">{children}</main>
+    <div className="flex h-dvh bg-lienzo">
+      <Navbar modulos={sesion.modulos} usuario={sesion.usuario} />
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-4xl px-10 py-12">{children}</div>
+      </main>
     </div>
   );
 }
