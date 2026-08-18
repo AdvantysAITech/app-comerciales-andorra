@@ -44,7 +44,7 @@ export const MODULOS: Modulo[] = [
     clave: "captacion",
     nombre: "Captación",
     descripcion: "Alta y clasificación de leads",
-    ruta: "/captacion",
+    ruta: "/leads",
     grupo: "comercial",
     disponible: true,
   },
@@ -62,7 +62,7 @@ export const MODULOS: Modulo[] = [
     descripcion: "Jornadas de diagnóstico y DERCAS",
     ruta: "/consultoria",
     grupo: "entrega",
-    disponible: false,
+    disponible: true,
   },
   {
     clave: "iso42001",
