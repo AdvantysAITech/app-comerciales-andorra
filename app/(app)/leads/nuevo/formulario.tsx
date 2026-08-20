@@ -186,7 +186,7 @@ export default function FormularioLead({
             : "Se ha creado el contacto en GHL."}{" "}
           La oportunidad está en la primera fase de su pipeline.
         </p>
-        <div className="mt-6 flex gap-3">
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
           <button className="boton" onClick={otroLead}>Dar de alta otro</button>
           <Link href="/leads" className="boton-fantasma inline-block">Ver mis leads</Link>
         </div>
@@ -292,7 +292,7 @@ export default function FormularioLead({
 
             <div>
               <label className="etiqueta">Rol en la oportunidad</label>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {ROLES_JV.map((r) => (
                   <button key={r} type="button" className="boton-fantasma"
                     data-activo={rolJV === r} onClick={() => setRolJV(r)}>

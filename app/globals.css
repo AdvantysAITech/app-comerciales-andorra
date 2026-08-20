@@ -250,14 +250,23 @@
     color: var(--tinta-media);
   }
 
+  /* 16px en movil NO es decorativo: Safari iOS hace zoom automatico al
+     enfocar cualquier campo por debajo de 16px y no lo deshace al salir.
+     A partir de md se vuelve a 14px, que es la escala del diseno. */
   .campo {
     width: 100%;
     background-color: var(--campo);
     border: 1px solid var(--linea);
     border-radius: var(--radio);
-    padding: 0.5rem 0.75rem;
-    font-size: 0.875rem;
+    padding: 0.625rem 0.75rem;
+    font-size: 1rem;
     color: var(--tinta);
+  }
+  @media (min-width: 768px) {
+    .campo {
+      padding: 0.5rem 0.75rem;
+      font-size: 0.875rem;
+    }
   }
 
   .error {
@@ -271,7 +280,7 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    height: 2.25rem;
+    height: 2.75rem;
     padding: 0 1rem;
     border: 1px solid transparent;
     border-radius: var(--radio);
@@ -296,7 +305,7 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    height: 2.25rem;
+    height: 2.75rem;
     padding: 0 1rem;
     border: 1px solid var(--linea);
     border-radius: var(--radio);
@@ -315,6 +324,15 @@
   .boton-fantasma[data-activo="true"] {
     border-color: var(--tinta);
     background-color: var(--elevado);
+  }
+
+  /* 2.75rem = 44px, el minimo tactil de Apple. En escritorio, donde se apunta
+     con raton, vuelven a la altura de diseno. */
+  @media (min-width: 768px) {
+    .boton,
+    .boton-fantasma {
+      height: 2.25rem;
+    }
   }
 
   /* Tarjeta neutra: la unidad de composicion de toda la plataforma. */

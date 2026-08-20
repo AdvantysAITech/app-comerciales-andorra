@@ -40,12 +40,12 @@ export default function Asistente({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Asistente de clasificación"
     >
-      <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto border border-line bg-surface p-6">
+      <div className="max-h-[88dvh] w-full overflow-y-auto border-t border-line bg-surface p-6 sm:max-w-lg sm:border">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="traza">Asistente</p>

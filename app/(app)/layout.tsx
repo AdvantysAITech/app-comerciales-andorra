@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Navbar } from "@/components/shell/navbar";
+import { Marco } from "@/components/shell/marco";
 import { sesionActual } from "@/lib/permisos";
 
 export default async function LayoutApp({
@@ -14,11 +14,8 @@ export default async function LayoutApp({
   if (!sesion) redirect("/login");
 
   return (
-    <div className="flex h-dvh bg-lienzo">
-      <Navbar modulos={sesion.modulos} usuario={sesion.usuario} />
-      <main className="min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-4xl px-10 py-12">{children}</div>
-      </main>
-    </div>
+    <Marco modulos={sesion.modulos} usuario={sesion.usuario}>
+      {children}
+    </Marco>
   );
 }

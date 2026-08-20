@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Advantys">
+  <!-- Icono de pestana. La letra ocupa el 66% del alto: por debajo se pierde a 16px. -->
+  <defs>
+    <linearGradient id="advantys-icono" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FE3633"/>
+      <stop offset="1" stop-color="#FE884C"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#advantys-icono)"/>
+  <g transform="translate(-2299.66 54.06) scale(0.36814)">
+    <!-- La "A" de Advantys Ai, extraida sin retocar del logotipo corporativo. -->
+    <g transform="translate(0 1350) scale(0.1 -0.1)">
+      <path fill="#FFFFFF" d="M68802 12593 c-42 -14 -97 -66 -122 -113 -10 -19
+-65 -168 -123 -330 -161 -452 -287 -798 -637 -1755 -576 -1576 -2523 -6929
+-2527 -6950 -4 -20 1 -20 594 -20 581 1 600 1 633 21 50 29 91 95 134 220 21
+60 143 397 271 749 127 352 256 710 286 795 48 137 59 160 99 202 29 30 59 50
+85 57 27 7 646 11 1928 12 l1887 1 58 -28 c37 -19 67 -43 85 -69 15 -23 79
+-186 146 -375 101 -285 511 -1421 542 -1501 6 -15 24 -39 40 -55 l29 -28 620
+-1 c341 0 620 1 620 3 0 2 -86 241 -191 530 -1335 3683 -2547 7033 -2914 8057
+-81 226 -156 426 -166 446 -28 55 -67 98 -113 121 -40 21 -50 21 -636 22 -431
+1 -604 -2 -628 -11z m1352 -3541 c401 -1120 767 -2140 813 -2266 45 -125 83
+-244 83 -263 0 -67 103 -63 -1632 -62 -1629 0 -1616 0 -1642 41 -12 20 -4 46
+53 173 17 39 244 669 505 1400 717 2010 1078 3015 1085 3015 3 0 334 -917 735
+-2038z"/>
+    </g>
+  </g>
+</svg>
