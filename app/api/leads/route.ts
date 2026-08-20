@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { leadSchema, ETIQUETA_FUENTE, ETIQUETA_IDIOMA } from "@/lib/domain/lead";
 import { ETIQUETA_LINEA, ETIQUETA_ROL } from "@/lib/domain/tipos";
+import { CLASIFICACION, PREGUNTAS_BANT, calcularBant } from "@/lib/domain/bant";
 import { supabaseServer } from "@/lib/supabase/server";
 import { buscarContacto, crearNota, upsertContacto } from "@/lib/ghl/contactos";
 import {
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
   }
   const lead = parsed.data;
   const esJV = lead.linea === "jv_builder";
+  const bant = calcularBant(lead.bant);
 
   const registrar = (
     resultado: "creado" | "bloqueado_wf16" | "error",
@@ -38,6 +40,9 @@ export async function POST(request: Request) {
       telefono: lead.telefono,
       empresa: lead.empresa,
       linea_negocio: lead.linea,
+      bant_score: bant.respondidas > 0 ? bant.total : null,
+      bant_clasificacion: bant.respondidas > 0 ? bant.clasificacion : null,
+      bant_completo: bant.completo,
       rol_jv: esJV ? lead.rolJV : null,
       spinoff_id: esJV ? lead.spinoffId : null,
       spinoff_nombre: esJV ? lead.spinoffNombre : null,
@@ -92,6 +97,7 @@ export async function POST(request: Request) {
         spinoffNombre: esJV ? lead.spinoffNombre : undefined,
         valorEstimado: lead.valorEstimado,
         pain: lead.pain,
+        bant: lead.bant,
       },
       contacto.id,
     );
@@ -105,12 +111,25 @@ export async function POST(request: Request) {
       ? `${ETIQUETA_LINEA[lead.linea]} · ${lead.spinoffNombre} · ${ETIQUETA_ROL[lead.rolJV]}`
       : ETIQUETA_LINEA[lead.linea];
 
+    // La nota deja por escrito de dónde sale el score. Si alguien discute un
+    // WARM, se ve qué se preguntó y qué se dejó en blanco, sin abrir la app.
+    const detalleBant = PREGUNTAS_BANT.map((p) => {
+      const opcion = p.opciones.find((o) => o.valor === lead.bant[p.id]);
+      return `· ${p.etiqueta}: ${opcion ? `${opcion.etiquetaGhl} (${opcion.puntosX2 / 2} pt)` : "sin dato"}`;
+    });
+
     await crearNota(
       contacto.id,
       [
         `Alta desde la App Comercial por ${user.email}.`,
         `Clasificación: ${clasificacion}.`,
-        lead.notas ? `Notas: ${lead.notas}` : null,
+        bant.respondidas > 0
+          ? `BANT: ${bant.total}/10 — ${CLASIFICACION[bant.clasificacion].tag}${
+              bant.completo ? "" : ` (provisional, ${bant.respondidas}/6 respondidas, techo ${bant.techo})`
+            }`
+          : "BANT: sin cualificar todavía.",
+        ...detalleBant,
+        lead.notas ? `Observaciones: ${lead.notas}` : null,
       ]
         .filter(Boolean)
         .join("\n"),
@@ -126,6 +145,7 @@ export async function POST(request: Request) {
       contactoId: contacto.id,
       oportunidadId: oportunidad.id,
       contactoExistia: !contacto.nuevo,
+      bant: bant.respondidas > 0 ? bant : null,
     });
   } catch (error) {
     const detalle = error instanceof Error ? error.message : "Error desconocido";

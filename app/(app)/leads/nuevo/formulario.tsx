@@ -14,8 +14,19 @@ import {
 import { LINEAS, ROLES_JV, ETIQUETA_LINEA, ETIQUETA_ROL } from "@/lib/domain/tipos";
 import type { LineaNegocio, RolJV } from "@/lib/domain/tipos";
 import type { Spinoff } from "@/lib/ghl/spinoffs";
+import {
+  PREGUNTAS_BANT,
+  CLASIFICACION,
+  calcularBant,
+  type RespuestasBant,
+  type CriterioBant,
+} from "@/lib/domain/bant";
 import Asistente from "./asistente";
 import type { Sugerencia } from "@/lib/domain/lead";
+
+/** Orden de aparición de los bloques. Es el orden en que se pregunta en una
+ *  conversación real: primero si hay dinero, luego si quien habla puede gastarlo. */
+const BLOQUES = ["Budget", "Authority", "Need", "Timeline"] as const;
 
 type Campos = {
   nombre: string;
@@ -52,6 +63,7 @@ export default function FormularioLead({
   const [linea, setLinea] = useState<LineaNegocio | null>(null);
   const [rolJV, setRolJV] = useState<RolJV | null>(null);
   const [spinoffId, setSpinoffId] = useState("");
+  const [bant, setBant] = useState<RespuestasBant>({});
   const [mostrarAsistente, setMostrarAsistente] = useState(false);
   const [sugerido, setSugerido] = useState(false);
 
@@ -115,6 +127,7 @@ export default function FormularioLead({
       pain: campos.pain || undefined,
       notas: campos.notas || undefined,
       valorEstimado: campos.valorEstimado ? Number(campos.valorEstimado) : undefined,
+      bant,
       linea,
       ...(esJV
         ? { spinoffId, spinoffNombre: spinoff?.nombre ?? "", rolJV: rolJV ?? undefined }
@@ -152,10 +165,13 @@ export default function FormularioLead({
     setLinea(null);
     setRolJV(null);
     setSpinoffId("");
+    setBant({});
     setExito(null);
     setAviso(null);
     setSugerido(false);
   }
+
+  const resultado = calcularBant(bant);
 
   /* ---------------- Confirmación ---------------- */
 
@@ -223,9 +239,6 @@ export default function FormularioLead({
       {/* Clasificación */}
       <section className="panel p-6">
         <p className="traza mb-1">Clasificación</p>
-        <p className="mb-5 text-sm text-muted">
-          Decide en qué pipeline entra el lead. GHL no reclasifica por su cuenta.
-        </p>
 
         <div className="mb-4">
           <button
@@ -293,13 +306,82 @@ export default function FormularioLead({
         )}
       </section>
 
+      {/* Cualificación BANT */}
+      <section className="panel p-6">
+        <p className="traza mb-1">Cualificación BANT</p>
+        <p className="mb-6 text-sm text-tinta-media">
+          Responde lo que haya salido en la conversación. Lo que dejes en blanco no puntúa
+          y se completa en el diagnóstico — no es lo mismo &laquo;no tiene presupuesto&raquo;
+          que &laquo;no se lo he preguntado&raquo;.
+        </p>
+
+        <div className="space-y-7">
+          {BLOQUES.map((bloque) => (
+            <div key={bloque}>
+              <p className="traza mb-3">{bloque}</p>
+              <div className="grid gap-5 sm:grid-cols-2">
+                {PREGUNTAS_BANT.filter((p) => p.bloque === bloque).map((p) => (
+                  <div key={p.id}>
+                    <label className="etiqueta" htmlFor={`bant-${p.id}`}>
+                      {p.etiqueta}
+                    </label>
+                    <select
+                      id={`bant-${p.id}`}
+                      className="campo"
+                      value={bant[p.id] ?? ""}
+                      onChange={(e) =>
+                        setBant((b) => {
+                          const siguiente = { ...b };
+                          if (e.target.value) siguiente[p.id as CriterioBant] = e.target.value;
+                          else delete siguiente[p.id as CriterioBant];
+                          return siguiente;
+                        })
+                      }
+                    >
+                      <option value="">Sin dato</option>
+                      {p.opciones.map((o) => (
+                        <option key={o.valor} value={o.valor}>
+                          {o.etiquetaGhl}
+                        </option>
+                      ))}
+                    </select>
+                    {/* El guion es lo que el comercial dice en voz alta. */}
+                    <p className="mt-1.5 text-xs italic text-tinta-tenue">&ldquo;{p.guion}&rdquo;</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {resultado.respondidas > 0 && (
+          <div className="mt-8 border-l-2 border-accent bg-accent-soft px-5 py-4">
+            <div className="flex items-baseline gap-3">
+              <p className="text-3xl font-semibold tabular-nums leading-none">
+                {resultado.total.toLocaleString("es-ES")}
+              </p>
+              <p className="traza">
+                de 10 &middot; {CLASIFICACION[resultado.clasificacion].tag}
+              </p>
+            </div>
+            <p className="mt-3 text-sm">{CLASIFICACION[resultado.clasificacion].accion}</p>
+            {!resultado.completo && (
+              <p className="traza mt-3 normal-case">
+                Score provisional: {resultado.respondidas} de 6 respondidas. Con las que faltan
+                podría llegar a {resultado.techo.toLocaleString("es-ES")}.
+              </p>
+            )}
+          </div>
+        )}
+      </section>
+
       {/* Contexto comercial */}
       <section className="panel p-6">
         <p className="traza mb-5">Contexto comercial</p>
         <div className="space-y-4">
           <Campo etiqueta="Valor estimado del contrato (€, opcional)" tipo="number"
             valor={campos.valorEstimado} onChange={set("valorEstimado")} error={errores.valorEstimado} />
-          <Area etiqueta="Principal pain declarado (opcional)" valor={campos.pain} onChange={set("pain")} />
+          <Area etiqueta="Principal dolor declarado (opcional)" valor={campos.pain} onChange={set("pain")} />
           <Area etiqueta="Notas internas (opcional)" valor={campos.notas} onChange={set("notas")} />
         </div>
       </section>

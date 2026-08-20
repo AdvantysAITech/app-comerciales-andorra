@@ -55,6 +55,36 @@ export const CAMPO_OPORTUNIDAD = {
   rol_jv: "lfgwNeKAU142WF0dRK95",
   tipologia_servicio: "NrGxhrkhex28tsxIgBUw",
   pain_declarado: "iZgonE2aX5eGn88UMIQp",
+  procesos_criticos: "4C1X1xw1M0BacQDBtOFw",
+  bant_score_total: "4JuRmJLSXZnQSioMqqRv",
+} as const;
+
+/**
+ * Campos BANT de Oportunidad, indexados por criterio de `lib/domain/bant.ts`.
+ * `respuesta` guarda la opción elegida; `puntos` el valor individual.
+ *
+ * OJO con `authority`: en GHL está declarado como CHECKBOX, no como
+ * SINGLE_OPTIONS. La API v2 espera un ARRAY en los checkbox — mandarle la
+ * cadena "Sí" no da error, simplemente deja el campo vacío. Lo resuelve
+ * `campoCheckbox()` en contactos.ts; no uses `campo()` para este.
+ */
+export const CAMPO_BANT = {
+  budget_tiene: { respuesta: "mprVGYr4LSz5UF1rteIc", puntos: "9JxoK6zt63xmA8gJtd6K" },
+  budget_rango: { respuesta: "8gqoxNJibDtbDEwP7viD", puntos: "9L9ltBcRo4PiUBCRY3uM" },
+  authority: { respuesta: "Wjn65f5HeEU1NcDsIMZA", puntos: "psIMGvhLu3ub36psXo1k" },
+  need_urgencia: { respuesta: "yslFF1QyURCPsxd84OHd", puntos: "MEYFKeeDlcOj2ZdfeDm7" },
+  need_impacto: { respuesta: "ns4i8GtkjlQHuQsDQlq3", puntos: "PLm5SBZ8EGgRRhhpuxjd" },
+  timeline: { respuesta: "HPDaaWFJGv4eV8oK3C9s", puntos: "57dhTrYkvQP6IeLT29fN" },
+} as const;
+
+/** Campos de diagnóstico de Contacto (RF-02), para la fase de profundización. */
+export const CAMPO_DIAGNOSTICO = {
+  sector: "RlIcL7I8n71KVOQsJBsS",
+  empleados: "CIpw7OQYrBURxpOiWPjA",
+  facturacion: "yIHadowj42KFmcQIk6iq",
+  herramientas: "lG6ROliWgf5k9inMkVUb",
+  experiencia_consultora: "1tYmx6xtWyNw4yWVdSfE",
+  diagnostico_realizado: "LPTVk66cPrQ7mgHmT9yk",
 } as const;
 
 /** Objeto personalizado Spin-off. */

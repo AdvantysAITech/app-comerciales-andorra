@@ -16,6 +16,14 @@ export type ContactoGhl = {
 export const campo = (id: string, valor: string | number | undefined | null) =>
   id && valor !== undefined && valor !== null && valor !== "" ? [{ id, field_value: valor }] : [];
 
+/**
+ * Variante para campos declarados como CHECKBOX en GHL, que esperan un ARRAY
+ * aunque solo admitan una opción. Mandarles la cadena suelta no da error: deja
+ * el campo vacío en silencio. Lo sufre "BANT - Authority (¿es el decisor?)".
+ */
+export const campoCheckbox = (id: string, valor: string | undefined | null) =>
+  id && valor ? [{ id, field_value: [valor] }] : [];
+
 function partirNombre(nombre: string) {
   const partes = nombre.trim().split(/\s+/);
   return { firstName: partes[0], lastName: partes.slice(1).join(" ") || undefined };

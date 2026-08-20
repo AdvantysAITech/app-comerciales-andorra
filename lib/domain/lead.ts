@@ -4,6 +4,7 @@
  */
 import { z } from "zod";
 import { LINEAS, ROLES_JV, type LineaNegocio, type RolJV } from "./tipos";
+import { PREGUNTAS_BANT, type CriterioBant } from "./bant";
 
 export const FUENTES = ["linkedin", "referido", "web", "campana", "evento", "otro"] as const;
 export type Fuente = (typeof FUENTES)[number];
@@ -31,6 +32,25 @@ export const ETIQUETA_IDIOMA: Record<Idioma, string> = {
 /* Esquema de alta                                                     */
 /* ------------------------------------------------------------------ */
 
+/** Las opciones válidas salen de PREGUNTAS_BANT, no de una lista paralela:
+ *  si mañana cambia un peso o una opción, el validador cambia con él. */
+const opcionesDe = (id: CriterioBant) =>
+  PREGUNTAS_BANT.find((p) => p.id === id)!.opciones.map((o) => o.valor) as [string, ...string[]];
+
+/**
+ * BANT parcial a propósito (RF-02 lo sitúa en el diagnóstico; aquí se recoge lo
+ * que salga en la conversación). Un criterio en blanco no puntúa y no se manda
+ * a GHL — no es lo mismo "no tiene presupuesto" que "no se lo he preguntado".
+ */
+export const bantSchema = z.object({
+  budget_tiene: z.enum(opcionesDe("budget_tiene")).optional(),
+  budget_rango: z.enum(opcionesDe("budget_rango")).optional(),
+  authority: z.enum(opcionesDe("authority")).optional(),
+  need_urgencia: z.enum(opcionesDe("need_urgencia")).optional(),
+  need_impacto: z.enum(opcionesDe("need_impacto")).optional(),
+  timeline: z.enum(opcionesDe("timeline")).optional(),
+});
+
 const base = z.object({
   nombre: z.string().trim().min(2, "Escribe nombre y apellidos"),
   email: z.string().trim().email("Revisa el email"),
@@ -44,6 +64,7 @@ const base = z.object({
   valorEstimado: z.number().nonnegative().optional(),
   pain: z.string().trim().optional(),
   notas: z.string().trim().optional(),
+  bant: bantSchema.default({}),
 });
 
 /**
