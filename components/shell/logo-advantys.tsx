@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Logotipo Advantys como SVG en linea.
  *
@@ -7,7 +9,16 @@
  *
  * Las variantes estaticas /logo-advantys-negro.svg y /logo-advantys-blanco.svg
  * quedan en public/ para lo que no es React: favicon, firmas de email, Open Graph.
+ *
+ * El id del degradado se genera por instancia con useId(). No es un capricho:
+ * el logo aparece dos veces en el DOM a la vez (barra superior de movil y
+ * barra lateral, que en escritorio va con `hidden` pero sigue en el arbol). Con
+ * un id fijo los dos SVG lo duplican, `url(#...)` deja de resolverse y, como el
+ * SVG no pinta nada cuando falla una referencia de relleno sin color de
+ * reserva, el logotipo desaparece entero salvo el "Ai" en currentColor.
  */
+import { useId } from "react";
+
 type Props = {
   className?: string;
   /** Texto alternativo. Pon "" si el logo es decorativo y ya hay texto al lado. */
@@ -15,6 +26,10 @@ type Props = {
 };
 
 export function LogoAdvantys({ className, titulo = "Advantys Ai" }: Props) {
+  // useId devuelve caracteres distintos segun la version de React (":r0:",
+  // "«r0»"...). Se limpian para que el id sea siempre valido dentro de url(#).
+  const degradado = `advantys-degradado-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
+
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -25,13 +40,13 @@ export function LogoAdvantys({ className, titulo = "Advantys Ai" }: Props) {
       aria-hidden={titulo ? undefined : true}
     >
 <defs>
-<linearGradient id="advantys-degradado" x1="0" y1="0" x2="1" y2="0">
-<stop offset="0" stop-color="#FE3633"/>
-<stop offset="1" stop-color="#FE884C"/>
+<linearGradient id={degradado} x1="0" y1="0" x2="1" y2="0">
+<stop offset="0" stopColor="#FE3633" />
+<stop offset="1" stopColor="#FE884C" />
 </linearGradient>
 </defs>
 <g transform="translate(0.000000,1350.000000) scale(0.100000,-0.100000)">
-<g fill="url(#advantys-degradado)">
+<g fill={`url(#${degradado})`}>
 <path d="M15232 13226 c-56 -18 -80 -40 -104 -94 -19 -41 -19 -91 -19 -1870
 l1 -1827 -23 30 c-149 200 -450 515 -627 655 -231 183 -508 339 -770 434 -69
 25 -153 57 -188 71 -105 43 -251 72 -567 115 -464 61 -652 72 -922 49 -644

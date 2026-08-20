@@ -16,14 +16,18 @@ import { LogoAdvantys } from "@/components/shell/logo-advantys";
 type Props = {
   modulos: Modulo[];
   usuario: { nombre: string; email: string };
+  /** Lo pone Marco: "hidden md:flex" en escritorio, "flex" dentro del cajón. */
+  className?: string;
 };
 
-export function Navbar({ modulos, usuario }: Props) {
+export function Navbar({ modulos, usuario, className = "flex" }: Props) {
   const pathname = usePathname();
   const enPerfil = pathname.startsWith("/perfil");
 
   return (
-    <nav className="flex h-full w-60 shrink-0 flex-col border-r border-linea bg-panel">
+    <nav
+      className={`h-full w-60 shrink-0 flex-col border-r border-linea bg-panel ${className}`}
+    >
       <Link
         href="/"
         aria-label="Inicio"

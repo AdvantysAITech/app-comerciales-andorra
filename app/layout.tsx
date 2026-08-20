@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { DM_Sans } from "next/font/google";
 import "./globals.css";
 import { ProveedorTema, CLAVE_TEMA } from "@/components/tema/proveedor-tema";
@@ -17,6 +17,24 @@ const sans = DM_Sans({
 export const metadata: Metadata = {
   title: "Plataforma Advantys",
   description: "Plataforma interna de Advantys AI",
+};
+
+/**
+ * maximumScale sin bloquear: NO se pone user-scalable=no. Impedir el zoom es
+ * un fallo de accesibilidad; el zoom parasito de iOS ya se corrige en
+ * globals.css poniendo los campos a 16px, que es la solucion correcta.
+ *
+ * themeColor pinta la barra del navegador del color de la app, para que en
+ * modo oscuro no quede una franja blanca arriba.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#faf9f7" },
+    { media: "(prefers-color-scheme: dark)", color: "#1a1a1c" },
+  ],
 };
 
 /**
