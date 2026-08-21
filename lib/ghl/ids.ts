@@ -11,7 +11,7 @@ export const PIPELINES = {
     id: "iCYcovYZbhHhCrRYUepk",
     primeraFase: "90e7317e-88e0-4b14-b888-657135493853",
   },
-  auditoria_iso: {
+  iso42001: {
     id: "fPD7Srb6mpQDf0h3wYbP",
     primeraFase: "ea9a8845-9d5e-4862-a72d-f743e5f6de91",
   },
@@ -28,16 +28,9 @@ export const PIPELINES = {
 /** RF-16: cada lead clasificado cae en un único pipeline, primera fase. */
 export function pipelineDestino(linea: LineaNegocio, rolJV?: RolJV): PipelineRef {
   if (linea === "consultoria") return PIPELINES.desarrollo_negocio;
-  if (linea === "auditoria_iso42001") return PIPELINES.auditoria_iso;
+  if (linea === "iso42001") return PIPELINES.iso42001;
   return rolJV === "inversor" ? PIPELINES.jv_inversor : PIPELINES.jv_cliente_final;
 }
-
-/** WF-16: una oportunidad Ganada en estos pipelines rompe la independencia del auditor. */
-export const PIPELINES_CONFLICTO_INDEPENDENCIA: string[] = [
-  PIPELINES.desarrollo_negocio.id,
-  PIPELINES.jv_cliente_final.id,
-  PIPELINES.jv_inversor.id,
-];
 
 /** Campos personalizados de Contacto. */
 export const CAMPO_CONTACTO = {
@@ -46,7 +39,9 @@ export const CAMPO_CONTACTO = {
   fuente_captacion: "4o4wvoqfHdd8KjsackBH",
   idioma_preferido: "sGCUOmOn6CiGaYCBcQFw",
   sector: "RlIcL7I8n71KVOQsJBsS",
-  cliente_otra_linea: "dzXy8jp5sM7opgJbJUQe",
+  empleados: "CIpw7OQYrBURxpOiWPjA",
+  facturacion: "yIHadowj42KFmcQIk6iq",
+  herramientas: "lG6ROliWgf5k9inMkVUb",
 } as const;
 
 /** Campos personalizados de Oportunidad. */
@@ -79,10 +74,6 @@ export const CAMPO_BANT = {
 
 /** Campos de diagnóstico de Contacto (RF-02), para la fase de profundización. */
 export const CAMPO_DIAGNOSTICO = {
-  sector: "RlIcL7I8n71KVOQsJBsS",
-  empleados: "CIpw7OQYrBURxpOiWPjA",
-  facturacion: "yIHadowj42KFmcQIk6iq",
-  herramientas: "lG6ROliWgf5k9inMkVUb",
   experiencia_consultora: "1tYmx6xtWyNw4yWVdSfE",
   diagnostico_realizado: "LPTVk66cPrQ7mgHmT9yk",
 } as const;
@@ -91,6 +82,7 @@ export const CAMPO_DIAGNOSTICO = {
 export const OBJETO_SPINOFF = {
   key: "custom_objects.spin_offs",
   propNombre: "custom_objects.spin_offs.nombre_de_la_spin_off",
+  propClave: "custom_objects.spin_offs.clave_interna",
 } as const;
 
 /**

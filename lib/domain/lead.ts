@@ -6,7 +6,15 @@ import { z } from "zod";
 import { LINEAS, ROLES_JV, type LineaNegocio, type RolJV } from "./tipos";
 import { PREGUNTAS_BANT, type CriterioBant } from "./bant";
 
-export const FUENTES = ["linkedin", "referido", "web", "campana", "evento", "otro"] as const;
+export const FUENTES = [
+  "linkedin",
+  "referido",
+  "web",
+  "campana",
+  "camara_andorra",
+  "evento",
+  "otro",
+] as const;
 export type Fuente = (typeof FUENTES)[number];
 
 export const IDIOMAS = ["es", "ca", "en"] as const;
@@ -16,8 +24,9 @@ export type Idioma = (typeof IDIOMAS)[number];
 export const ETIQUETA_FUENTE: Record<Fuente, string> = {
   linkedin: "LinkedIn",
   referido: "Referido",
-  web: "Web Advantys",
+  web: "Web",
   campana: "Campaña",
+  camara_andorra: "Cámara de comercio Andorra",
   evento: "Evento",
   otro: "Otro",
 };
@@ -26,6 +35,60 @@ export const ETIQUETA_IDIOMA: Record<Idioma, string> = {
   es: "Español",
   ca: "Català",
   en: "English",
+};
+
+/* ------------------------------------------------------------------ */
+/* Catálogos de empresa (sección 4.1)                                  */
+/* ------------------------------------------------------------------ */
+
+export const SECTORES = [
+  "educacion",
+  "hosteleria",
+  "agroalimentario",
+  "financiero",
+  "inmobiliario",
+  "industrial",
+  "retail",
+  "salud",
+  "administracion_publica",
+  "otro",
+] as const;
+export type Sector = (typeof SECTORES)[number];
+
+export const EMPLEADOS = ["1_10", "11_50", "51_100", "101_200", "mas_200"] as const;
+export type Empleados = (typeof EMPLEADOS)[number];
+
+export const FACTURACION = ["menos_2m", "2_10m", "10_50m", "mas_50m"] as const;
+export type Facturacion = (typeof FACTURACION)[number];
+
+/** Texto EXACTO de las opciones en GHL. Mismo contrato que ETIQUETA_FUENTE:
+ *  una letra de diferencia y el campo se guarda vacío sin dar error. */
+export const ETIQUETA_SECTOR: Record<Sector, string> = {
+  educacion: "Educación",
+  hosteleria: "Hostelería / Turismo",
+  agroalimentario: "Agroalimentario",
+  financiero: "Servicios Financieros",
+  inmobiliario: "Residencial / Inmobiliario",
+  industrial: "Industrial / Manufactura",
+  retail: "Retail",
+  salud: "Salud",
+  administracion_publica: "Administración Pública",
+  otro: "Otro",
+};
+
+export const ETIQUETA_EMPLEADOS: Record<Empleados, string> = {
+  "1_10": "De 1 a 10",
+  "11_50": "De 11 a 50",
+  "51_100": "De 51 a 100",
+  "101_200": "De 101 a 200",
+  mas_200: "Más de 200",
+};
+
+export const ETIQUETA_FACTURACION: Record<Facturacion, string> = {
+  menos_2m: "Menos de 2M",
+  "2_10m": "Entre 2 y 10M",
+  "10_50m": "Entre 10 y 50M",
+  mas_50m: "Más de 50M",
 };
 
 /* ------------------------------------------------------------------ */
@@ -64,7 +127,12 @@ const base = z.object({
   valorEstimado: z.number().nonnegative().optional(),
   pain: z.string().trim().optional(),
   notas: z.string().trim().optional(),
+  uuid: z.uuid("Falta el identificador del lead"),
   bant: bantSchema.default({}),
+  sector: z.enum(SECTORES),
+  empleados: z.enum(EMPLEADOS),
+  facturacion: z.enum(FACTURACION),
+  herramientas: z.string().trim().optional(),
 });
 
 /**
@@ -73,14 +141,13 @@ const base = z.object({
  * hace que sea imposible construir un lead válido sin ellos.
  */
 export const leadSchema = z.discriminatedUnion("linea", [
-  base.extend({ linea: z.literal("consultoria") }),
+  base.extend({ linea: z.literal("iso42001") }),
   base.extend({
     linea: z.literal("jv_builder"),
-    spinoffId: z.string().min(1, "Selecciona la spin-off"),
-    spinoffNombre: z.string().min(1, "Selecciona la spin-off"),
+    spinoffClave: z.string().min(1, "Selecciona la spin-off"),
     rolJV: z.enum(ROLES_JV, { message: "Selecciona Cliente Final o Inversor" }),
   }),
-  base.extend({ linea: z.literal("auditoria_iso42001") }),
+  base.extend({ linea: z.literal("iso42001") }),
 ]);
 
 export type LeadInput = z.infer<typeof leadSchema>;
@@ -111,7 +178,7 @@ export type Sugerencia = {
 export function sugerirClasificacion(r: RespuestasAsistente): Sugerencia | null {
   if (r.preguntaNormativa === "si") {
     return {
-      linea: "auditoria_iso42001",
+      linea: "iso42001",
       confianza: "alta",
       motivo: "Pregunta por certificación o cumplimiento normativo.",
     };

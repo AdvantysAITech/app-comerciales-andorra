@@ -1,17 +1,24 @@
 /**
- * Cualificación BANT. DERCAS v3.4 — 2.2 (campos BANT), RF-02, RF-03, WF-02.
+ * Cualificación BANT. Escala de la especificación de la App Comercial
+ * (sección 4.2), que sustituye a la de RF-03 del DERCAS.
  * TypeScript puro: ni Next ni GHL. La app calcula el total y se lo manda ya
  * sumado a GHL, esquivando la limitación de Math Operation de ALR-13 para los
  * leads que entran por la App Comercial.
  *
- * Los puntos se manejan internamente en MEDIOS PUNTOS (enteros). La escala usa
- * incrementos de 0,5 y sumar floats en JavaScript da 4.499999999999999. Se
- * divide entre 2 una sola vez, al final.
+ * Los puntos se manejan internamente en CENTÉSIMAS (enteros). La escala tiene
+ * valores de 0,75 y 0,8, y sumar floats en JavaScript da 4.499999999999999.
+ * Se divide entre 100 una sola vez, al final.
  */
 
 /* ------------------------------------------------------------------ */
 /* Escala                                                              */
 /* ------------------------------------------------------------------ */
+
+/** Versión de la escala. Se guarda junto a cada lead: un score de 7,5 no
+ *  significa lo mismo si mañana se repesa un criterio. Cuando la escala pase a
+ *  `bant_config` en Supabase, esta constante deja de ser la fuente y pasa a ser
+ *  la semilla de la v1. */
+export const VERSION_ESCALA_BANT = "v1";
 
 export const CRITERIOS_BANT = [
   "budget_tiene",
@@ -30,8 +37,8 @@ export type OpcionBant = {
   /** Texto EXACTO de la opción en GHL. Si cambias la opción allí, cámbiala aquí
    *  o el campo se guardará vacío (mismo contrato que ETIQUETA_FUENTE). */
   etiquetaGhl: string;
-  /** Puntos × 2. */
-  puntosX2: number;
+  /** Puntos × 100. */
+  puntosX100: number;
 };
 
 export type PreguntaBant = {
@@ -40,12 +47,9 @@ export type PreguntaBant = {
   bloque: "Budget" | "Authority" | "Need" | "Timeline";
   /** Etiqueta corta del desplegable. */
   etiqueta: string;
-  /** Cómo se le pregunta al cliente en voz alta. Alimenta el asistente guiado:
-   *  el comercial está delante del lead, no rellenando una ficha. */
+  /** Cómo se le pregunta al cliente en voz alta. El comercial está delante del
+   *  lead, no rellenando una ficha. */
   guion: string;
-  /** Máximo del criterio × 2. Se deriva de las opciones, se declara para poder
-   *  comprobar en test que la escala sigue sumando 10. */
-  maximoX2: number;
   opciones: OpcionBant[];
 };
 
@@ -55,11 +59,10 @@ export const PREGUNTAS_BANT: PreguntaBant[] = [
     bloque: "Budget",
     etiqueta: "¿Tiene presupuesto?",
     guion: "¿Tenéis ya una partida asignada para esto, o es algo que todavía hay que aprobar?",
-    maximoX2: 4,
     opciones: [
-      { valor: "si", etiquetaGhl: "Sí", puntosX2: 4 },
-      { valor: "en_evaluacion", etiquetaGhl: "En evaluación", puntosX2: 2 },
-      { valor: "no", etiquetaGhl: "No", puntosX2: 0 },
+      { valor: "si", etiquetaGhl: "Sí", puntosX100: 200 },
+      { valor: "en_evaluacion", etiquetaGhl: "En evaluación", puntosX100: 100 },
+      { valor: "no", etiquetaGhl: "No", puntosX100: 0 },
     ],
   },
   {
@@ -67,12 +70,11 @@ export const PREGUNTAS_BANT: PreguntaBant[] = [
     bloque: "Budget",
     etiqueta: "Rango de inversión",
     guion: "¿En qué orden de magnitud os habéis planteado la inversión?",
-    maximoX2: 2,
     opciones: [
-      { valor: "mas_50k", etiquetaGhl: "Más de 50K", puntosX2: 2 },
-      { valor: "15_50k", etiquetaGhl: "Entre 15 y 50K", puntosX2: 2 },
-      { valor: "5_15k", etiquetaGhl: "Entre 5 y 15K", puntosX2: 1 },
-      { valor: "menos_5k", etiquetaGhl: "Menos de 5K", puntosX2: 0 },
+      { valor: "mas_50k", etiquetaGhl: "Más de 50K", puntosX100: 200 },
+      { valor: "15_50k", etiquetaGhl: "Entre 15 y 50K", puntosX100: 150 },
+      { valor: "5_15k", etiquetaGhl: "Entre 5 y 15K", puntosX100: 100 },
+      { valor: "menos_5k", etiquetaGhl: "Menos de 5K", puntosX100: 50 },
     ],
   },
   {
@@ -80,10 +82,10 @@ export const PREGUNTAS_BANT: PreguntaBant[] = [
     bloque: "Authority",
     etiqueta: "¿Es el decisor?",
     guion: "¿Esta decisión la firmas tú, o hay alguien más que tenga que dar el visto bueno?",
-    maximoX2: 4,
     opciones: [
-      { valor: "si", etiquetaGhl: "Sí", puntosX2: 4 },
-      { valor: "no", etiquetaGhl: "No", puntosX2: 0 },
+      { valor: "si", etiquetaGhl: "Sí", puntosX100: 200 },
+      { valor: "con_otros", etiquetaGhl: "Decide con otros", puntosX100: 100 },
+      { valor: "no", etiquetaGhl: "No", puntosX100: 0 },
     ],
   },
   {
@@ -91,26 +93,25 @@ export const PREGUNTAS_BANT: PreguntaBant[] = [
     bloque: "Need",
     etiqueta: "Nivel de urgencia (1-5)",
     guion: "Del 1 al 5, ¿cuánto te corre resolver esto?",
-    maximoX2: 4,
     opciones: [
-      { valor: "5", etiquetaGhl: "5", puntosX2: 4 },
-      { valor: "4", etiquetaGhl: "4", puntosX2: 3 },
-      { valor: "3", etiquetaGhl: "3", puntosX2: 2 },
-      { valor: "2", etiquetaGhl: "2", puntosX2: 1 },
-      { valor: "1", etiquetaGhl: "1", puntosX2: 0 },
+      { valor: "5", etiquetaGhl: "5", puntosX100: 100 },
+      { valor: "4", etiquetaGhl: "4", puntosX100: 80 },
+      { valor: "3", etiquetaGhl: "3", puntosX100: 60 },
+      { valor: "2", etiquetaGhl: "2", puntosX100: 40 },
+      { valor: "1", etiquetaGhl: "1", puntosX100: 20 },
     ],
   },
   {
     id: "need_impacto",
     bloque: "Need",
     etiqueta: "Impacto estimado",
-    guion: "Si esto siguiera igual dentro de un año, ¿qué os costaría? ¿Es un incordio o os frena de verdad?",
-    maximoX2: 3,
+    guion:
+      "Si esto siguiera igual dentro de un año, ¿qué os costaría? ¿Es un incordio o os frena de verdad?",
     opciones: [
-      { valor: "critico", etiquetaGhl: "Crítico", puntosX2: 3 },
-      { valor: "alto", etiquetaGhl: "Alto", puntosX2: 2 },
-      { valor: "medio", etiquetaGhl: "Medio", puntosX2: 1 },
-      { valor: "bajo", etiquetaGhl: "Bajo", puntosX2: 0 },
+      { valor: "critico", etiquetaGhl: "Crítico", puntosX100: 100 },
+      { valor: "alto", etiquetaGhl: "Alto", puntosX100: 75 },
+      { valor: "medio", etiquetaGhl: "Medio", puntosX100: 50 },
+      { valor: "bajo", etiquetaGhl: "Bajo", puntosX100: 25 },
     ],
   },
   {
@@ -118,22 +119,31 @@ export const PREGUNTAS_BANT: PreguntaBant[] = [
     bloque: "Timeline",
     etiqueta: "Plazo",
     guion: "¿Para cuándo necesitaríais tenerlo funcionando?",
-    maximoX2: 3,
     opciones: [
-      { valor: "menos_1_mes", etiquetaGhl: "Menos de 1 mes", puntosX2: 3 },
-      { valor: "1_3_meses", etiquetaGhl: "Entre 1 y 3 meses", puntosX2: 2 },
-      { valor: "mas_3_meses", etiquetaGhl: "Más de 3 meses", puntosX2: 1 },
-      { valor: "sin_plazo", etiquetaGhl: "Sin plazo", puntosX2: 0 },
+      { valor: "menos_1_mes", etiquetaGhl: "Menos de 1 mes", puntosX100: 200 },
+      { valor: "1_3_meses", etiquetaGhl: "Entre 1 y 3 meses", puntosX100: 150 },
+      { valor: "mas_3_meses", etiquetaGhl: "Más de 3 meses", puntosX100: 75 },
+      { valor: "sin_plazo", etiquetaGhl: "Sin plazo", puntosX100: 0 },
     ],
   },
 ];
 
+/** Máximo de cada criterio, derivado de sus propias opciones. Antes se declaraba
+ *  a mano junto a la pregunta y eran dos fuentes para el mismo dato: si alguien
+ *  cambiaba un peso y olvidaba el máximo, el techo mentía en silencio. */
+export function maximoX100(pregunta: PreguntaBant): number {
+  return Math.max(...pregunta.opciones.map((o) => o.puntosX100));
+}
+
 /** El total tiene que seguir siendo 0-10. Si alguien toca la escala, salta aquí
  *  y no tres capas más abajo con un score que ya no significa nada. */
-export const MAXIMO_X2 = PREGUNTAS_BANT.reduce((s, p) => s + p.maximoX2, 0);
-if (MAXIMO_X2 !== 20) {
-  throw new Error(`La escala BANT suma ${MAXIMO_X2 / 2}, tiene que sumar 10.`);
+export const MAXIMO_X100 = PREGUNTAS_BANT.reduce((s, p) => s + maximoX100(p), 0);
+if (MAXIMO_X100 !== 1000) {
+  throw new Error(`La escala BANT suma ${MAXIMO_X100 / 100}, tiene que sumar 10.`);
 }
+
+/** Centésimas a puntos, redondeando a un decimal (sección 4.2). */
+const aPuntos = (x100: number) => Math.round(x100 / 10) / 10;
 
 /* ------------------------------------------------------------------ */
 /* Cálculo                                                             */
@@ -146,9 +156,6 @@ export type RespuestasBant = Partial<Record<CriterioBant, string>>;
 export const CLASIFICACIONES = ["hot", "warm", "cold"] as const;
 export type Clasificacion = (typeof CLASIFICACIONES)[number];
 
-/** RF-03. Los umbrales del DERCAS son enteros (8-10 / 5-7 / 0-4) pero la escala
- *  da medios puntos, así que 7,5 y 4,5 caían en tierra de nadie. Se resuelven
- *  hacia abajo: el corte es >= 8 y >= 5. */
 export const CLASIFICACION: Record<
   Clasificacion,
   { etiqueta: string; tag: string; accion: string }
@@ -170,6 +177,7 @@ export const CLASIFICACION: Record<
   },
 };
 
+/** Cortes de la sección 4.2: 8-10 HOT · 5-7,9 WARM · 0-4,9 COLD. */
 export function clasificar(total: number): Clasificacion {
   if (total >= 8) return "hot";
   if (total >= 5) return "warm";
@@ -177,7 +185,7 @@ export function clasificar(total: number): Clasificacion {
 }
 
 export type ResultadoBant = {
-  /** 0-10, con un decimal como mucho. Es lo que se escribe en GHL. */
+  /** 0-10, con un decimal. Es lo que se escribe en GHL. */
   total: number;
   clasificacion: Clasificacion;
   respondidas: number;
@@ -187,32 +195,35 @@ export type ResultadoBant = {
    *  enfriar un lead que en realidad está a medio cualificar. */
   techo: number;
   sinResponder: CriterioBant[];
+  /** Escala con la que se calculó este resultado. */
+  version: string;
 };
 
 export function calcularBant(r: RespuestasBant): ResultadoBant {
-  let obtenidosX2 = 0;
-  let pendientesX2 = 0;
+  let obtenidosX100 = 0;
+  let pendientesX100 = 0;
   const sinResponder: CriterioBant[] = [];
 
   for (const pregunta of PREGUNTAS_BANT) {
     const valor = r[pregunta.id];
     const opcion = pregunta.opciones.find((o) => o.valor === valor);
     if (opcion) {
-      obtenidosX2 += opcion.puntosX2;
+      obtenidosX100 += opcion.puntosX100;
     } else {
-      pendientesX2 += pregunta.maximoX2;
+      pendientesX100 += maximoX100(pregunta);
       sinResponder.push(pregunta.id);
     }
   }
 
-  const total = obtenidosX2 / 2;
+  const total = aPuntos(obtenidosX100);
   return {
     total,
     clasificacion: clasificar(total),
     respondidas: PREGUNTAS_BANT.length - sinResponder.length,
     completo: sinResponder.length === 0,
-    techo: (obtenidosX2 + pendientesX2) / 2,
+    techo: aPuntos(obtenidosX100 + pendientesX100),
     sinResponder,
+    version: VERSION_ESCALA_BANT,
   };
 }
 
@@ -236,5 +247,5 @@ export function puntosGhl(criterio: CriterioBant, valor: string | undefined) {
   const opcion = PREGUNTAS_BANT.find((p) => p.id === criterio)?.opciones.find(
     (o) => o.valor === valor,
   );
-  return opcion ? opcion.puntosX2 / 2 : undefined;
+  return opcion ? aPuntos(opcion.puntosX100) : undefined;
 }

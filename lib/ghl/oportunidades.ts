@@ -5,7 +5,6 @@ import {
   ASOCIACION_SPINOFF_OPORTUNIDAD,
   CAMPO_BANT,
   CAMPO_OPORTUNIDAD,
-  PIPELINES_CONFLICTO_INDEPENDENCIA,
   pipelineDestino,
 } from "./ids";
 import { ETIQUETA_LINEA, ETIQUETA_ROL, type LineaNegocio, type RolJV } from "@/lib/domain/tipos";
@@ -16,32 +15,6 @@ import {
   type CriterioBant,
   type RespuestasBant,
 } from "@/lib/domain/bant";
-
-export type OportunidadGhl = {
-  id: string;
-  name?: string;
-  status?: string;
-  pipelineId?: string;
-};
-
-/**
- * WF-16 — independencia del auditor.
- * Se calcula en vivo consultando las oportunidades Ganadas del contacto, en vez
- * de leer el campo "¿Cliente de otra línea de negocio?" de GHL: los campos
- * calculados de GHL no son fiables (misma limitación que con la suma BANT) y
- * aquí un falso negativo significa venderle una auditoría a un cliente propio.
- */
-export async function tieneConflictoIndependencia(contactoId: string) {
-  const data = await ghl<{ opportunities?: OportunidadGhl[] }>("/opportunities/search", {
-    query: { location_id: locationId(), contact_id: contactoId, status: "won", limit: 100 },
-  });
-
-  const enConflicto = (data.opportunities ?? []).filter(
-    (o) => o.pipelineId && PIPELINES_CONFLICTO_INDEPENDENCIA.includes(o.pipelineId),
-  );
-
-  return { conflicto: enConflicto.length > 0, oportunidades: enConflicto };
-}
 
 export type DatosOportunidad = {
   empresa: string;
@@ -89,7 +62,7 @@ function camposBant(bant: RespuestasBant | undefined) {
 function nombreOportunidad(d: DatosOportunidad): string {
   if (d.linea === "jv_builder" && d.rolJV)
     return `${d.empresa} — ${d.spinoffNombre} — ${ETIQUETA_ROL[d.rolJV]}`;
-  if (d.linea === "auditoria_iso42001") return `${d.empresa} — Auditoría ISO 42001`;
+  if (d.linea === "iso42001") return `${d.empresa} — Implantación ISO 42001`;
   return `${d.empresa} — Consultoría`;
 }
 

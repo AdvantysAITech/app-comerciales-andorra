@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { buscarContacto } from "@/lib/ghl/contactos";
-import { tieneConflictoIndependencia } from "@/lib/ghl/oportunidades";
 import { getUsuarioSesion } from "@/lib/supabase/route-auth";
 
-/** Aviso orientativo mientras el comercial rellena. La validación real es POST /api/leads. */
+/** Aviso orientativo mientras el comercial rellena: ¿ya conocemos a esta persona?
+ *  Es informativo. Quien decide de verdad si crea o actualiza es el upsert. */
 export async function GET(request: Request) {
   if (!(await getUsuarioSesion())) {
     return NextResponse.json({ error: "Sesión caducada" }, { status: 401 });
@@ -16,19 +16,17 @@ export async function GET(request: Request) {
 
   try {
     const contacto = await buscarContacto({ email, telefono });
-    if (!contacto) return NextResponse.json({ contacto: null, conflictoAuditoria: false });
+    if (!contacto) return NextResponse.json({ contacto: null });
 
-    const { conflicto } = await tieneConflictoIndependencia(contacto.id);
     return NextResponse.json({
       contacto: {
         id: contacto.id,
         nombre: contacto.contactName,
         empresa: contacto.companyName,
       },
-      conflictoAuditoria: conflicto,
     });
   } catch {
     // Si el lookup falla, seguimos: el upsert no duplica de todas formas.
-    return NextResponse.json({ contacto: null, conflictoAuditoria: false });
+    return NextResponse.json({ contacto: null });
   }
 }

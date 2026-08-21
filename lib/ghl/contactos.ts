@@ -61,6 +61,10 @@ export type DatosContacto = {
   web?: string;
   fuente: string;
   idioma: string;
+  sector: string;
+  empleados: string;
+  facturacion: string;
+  herramientas?: string;
 };
 
 /**
@@ -92,6 +96,10 @@ export async function upsertContacto(
         ...campo(CAMPO_CONTACTO.web_empresa, d.web),
         ...campo(CAMPO_CONTACTO.fuente_captacion, d.fuente),
         ...campo(CAMPO_CONTACTO.idioma_preferido, d.idioma),
+        ...campo(CAMPO_CONTACTO.sector, d.sector),
+        ...campo(CAMPO_CONTACTO.empleados, d.empleados),
+        ...campo(CAMPO_CONTACTO.facturacion, d.facturacion),
+        ...campo(CAMPO_CONTACTO.herramientas, d.herramientas),
       ],
     },
   });

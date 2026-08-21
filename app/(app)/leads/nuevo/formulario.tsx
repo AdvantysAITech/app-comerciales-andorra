@@ -6,10 +6,19 @@ import Link from "next/link";
 import {
   FUENTES,
   IDIOMAS,
+  SECTORES,
+  EMPLEADOS,
+  FACTURACION,
   ETIQUETA_FUENTE,
   ETIQUETA_IDIOMA,
+  ETIQUETA_SECTOR,
+  ETIQUETA_EMPLEADOS,
+  ETIQUETA_FACTURACION,
   type Fuente,
   type Idioma,
+  type Sector,
+  type Empleados,
+  type Facturacion,
 } from "@/lib/domain/lead";
 import { LINEAS, ROLES_JV, ETIQUETA_LINEA, ETIQUETA_ROL } from "@/lib/domain/tipos";
 import type { LineaNegocio, RolJV } from "@/lib/domain/tipos";
@@ -38,6 +47,10 @@ type Campos = {
   web: string;
   fuente: Fuente | "";
   idioma: Idioma | "";
+  sector: Sector | "";
+  empleados: Empleados | "";
+  facturacion: Facturacion | "";
+  herramientas: string;
   valorEstimado: string;
   pain: string;
   notas: string;
@@ -45,7 +58,8 @@ type Campos = {
 
 const VACIO: Campos = {
   nombre: "", email: "", telefono: "", empresa: "", cargo: "", ciudadPais: "",
-  web: "", fuente: "", idioma: "es", valorEstimado: "", pain: "", notas: "",
+  web: "", fuente: "", idioma: "es", sector: "", empleados: "", facturacion: "",
+  herramientas: "", valorEstimado: "", pain: "", notas: "",
 };
 
 type Exito = { contactoId: string; oportunidadId: string; contactoExistia: boolean };
@@ -62,14 +76,14 @@ export default function FormularioLead({
   const [campos, setCampos] = useState<Campos>(VACIO);
   const [linea, setLinea] = useState<LineaNegocio | null>(null);
   const [rolJV, setRolJV] = useState<RolJV | null>(null);
-  const [spinoffId, setSpinoffId] = useState("");
+  const [spinoffClave, setSpinoffClave] = useState("");
   const [bant, setBant] = useState<RespuestasBant>({});
   const [mostrarAsistente, setMostrarAsistente] = useState(false);
   const [sugerido, setSugerido] = useState(false);
+  const [uuid, setUuid] = useState(() => crypto.randomUUID());
 
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
-  const [bloqueo, setBloqueo] = useState<{ mensaje: string; oportunidades: string[] } | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [exito, setExito] = useState<Exito | null>(null);
@@ -95,9 +109,7 @@ export default function FormularioLead({
 
       if (!data.contacto) return setAviso(null);
       setAviso(
-        data.conflictoAuditoria
-          ? `${data.contacto.nombre} ya es cliente de Advantys en otra línea de negocio. No se le puede abrir una Auditoría ISO 42001.`
-          : `Este contacto ya existe en GHL (${data.contacto.nombre}). Se actualizarán sus datos en vez de duplicarlo.`,
+        `Este contacto ya existe en GHL (${data.contacto.nombre}). Se actualizarán sus datos en vez de duplicarlo.`,
       );
     } catch {
       setAviso(null);
@@ -108,7 +120,6 @@ export default function FormularioLead({
     setEnviando(true);
     setErrores({});
     setErrorGeneral(null);
-    setBloqueo(null);
 
     // CA-07a: sin línea de negocio no se envía nada al servidor.
     if (!linea) {
@@ -118,20 +129,19 @@ export default function FormularioLead({
     }
 
     const esJV = linea === "jv_builder";
-    const spinoff = spinoffs.find((s) => s.id === spinoffId);
 
     const payload = {
+      uuid,
       ...campos,
       web: campos.web || undefined,
       cargo: campos.cargo || undefined,
       pain: campos.pain || undefined,
       notas: campos.notas || undefined,
+      herramientas: campos.herramientas || undefined,
       valorEstimado: campos.valorEstimado ? Number(campos.valorEstimado) : undefined,
       bant,
       linea,
-      ...(esJV
-        ? { spinoffId, spinoffNombre: spinoff?.nombre ?? "", rolJV: rolJV ?? undefined }
-        : {}),
+      ...(esJV ? { spinoffClave, rolJV: rolJV ?? undefined } : {}),
     };
 
     try {
@@ -145,8 +155,6 @@ export default function FormularioLead({
       if (res.status === 422) {
         setErrores(data.errores ?? {});
         setErrorGeneral("Revisa los campos marcados.");
-      } else if (res.status === 409) {
-        setBloqueo({ mensaje: data.error, oportunidades: data.oportunidades ?? [] });
       } else if (!res.ok) {
         setErrorGeneral(data.error ?? "No se ha podido guardar el lead.");
       } else {
@@ -160,11 +168,12 @@ export default function FormularioLead({
     }
   }
 
-  function otroLead() {
+    function otroLead() {
+    setUuid(crypto.randomUUID());
     setCampos(VACIO);
     setLinea(null);
     setRolJV(null);
-    setSpinoffId("");
+    setSpinoffClave("");
     setBant({});
     setExito(null);
     setAviso(null);
@@ -211,24 +220,29 @@ export default function FormularioLead({
           <Campo etiqueta="Ciudad y país" valor={campos.ciudadPais} onChange={set("ciudadPais")} error={errores.ciudadPais} />
           <Campo etiqueta="Web (opcional)" valor={campos.web} onChange={set("web")} error={errores.web} marcador="https://" />
 
-          <div>
-            <label className="etiqueta" htmlFor="fuente">Fuente de captación</label>
-            <select id="fuente" className="campo" value={campos.fuente}
-              aria-invalid={errores.fuente ? "true" : undefined}
-              onChange={(e) => set("fuente")(e.target.value)}>
-              <option value="">Selecciona…</option>
-              {FUENTES.map((f) => <option key={f} value={f}>{ETIQUETA_FUENTE[f]}</option>)}
-            </select>
-            {errores.fuente && <p className="error">{errores.fuente}</p>}
-          </div>
+          <Lista id="fuente" etiqueta="Fuente de captación" valor={campos.fuente}
+            opciones={FUENTES} etiquetas={ETIQUETA_FUENTE}
+            onChange={set("fuente")} error={errores.fuente} />
 
-          <div>
-            <label className="etiqueta" htmlFor="idioma">Idioma preferido</label>
-            <select id="idioma" className="campo" value={campos.idioma}
-              onChange={(e) => set("idioma")(e.target.value)}>
-              {IDIOMAS.map((i) => <option key={i} value={i}>{ETIQUETA_IDIOMA[i]}</option>)}
-            </select>
-          </div>
+          <Lista id="idioma" etiqueta="Idioma preferido" valor={campos.idioma}
+            opciones={IDIOMAS} etiquetas={ETIQUETA_IDIOMA}
+            onChange={set("idioma")} error={errores.idioma} />
+
+          <Lista id="sector" etiqueta="Sector" valor={campos.sector}
+            opciones={SECTORES} etiquetas={ETIQUETA_SECTOR}
+            onChange={set("sector")} error={errores.sector} />
+
+          <Lista id="empleados" etiqueta="Número de empleados" valor={campos.empleados}
+            opciones={EMPLEADOS} etiquetas={ETIQUETA_EMPLEADOS}
+            onChange={set("empleados")} error={errores.empleados} />
+
+          <Lista id="facturacion" etiqueta="Facturación anual" valor={campos.facturacion}
+            opciones={FACTURACION} etiquetas={ETIQUETA_FACTURACION}
+            onChange={set("facturacion")} error={errores.facturacion} />
+
+          <Campo etiqueta="Herramientas actuales (opcional)" valor={campos.herramientas}
+            onChange={set("herramientas")} error={errores.herramientas}
+            marcador="CRM, ERP…" />
         </div>
 
         {aviso && (
@@ -280,13 +294,15 @@ export default function FormularioLead({
             ) : (
               <div>
                 <label className="etiqueta" htmlFor="spinoff">Spin-off</label>
-                <select id="spinoff" className="campo" value={spinoffId}
-                  aria-invalid={errores.spinoffId ? "true" : undefined}
-                  onChange={(e) => setSpinoffId(e.target.value)}>
+                <select id="spinoff" className="campo" value={spinoffClave}
+                  aria-invalid={errores.spinoffClave ? "true" : undefined}
+                  onChange={(e) => setSpinoffClave(e.target.value)}>
                   <option value="">Selecciona la spin-off…</option>
-                  {spinoffs.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                  {spinoffs.map((s) => (
+                    <option key={s.clave} value={s.clave}>{s.nombre}</option>
+                  ))}
                 </select>
-                {errores.spinoffId && <p className="error">{errores.spinoffId}</p>}
+                {errores.spinoffClave && <p className="error">{errores.spinoffClave}</p>}
               </div>
             )}
 
@@ -386,18 +402,6 @@ export default function FormularioLead({
         </div>
       </section>
 
-      {bloqueo && (
-        <div className="border border-block bg-block-soft p-5">
-          <p className="traza" style={{ color: "var(--color-block)" }}>No se puede dar de alta</p>
-          <p className="mt-2 text-sm">{bloqueo.mensaje}</p>
-          {bloqueo.oportunidades.length > 0 && (
-            <ul className="mt-3 list-disc pl-5 text-sm text-muted">
-              {bloqueo.oportunidades.map((o) => <li key={o}>{o}</li>)}
-            </ul>
-          )}
-        </div>
-      )}
-
       {errorGeneral && <p className="error">{errorGeneral}</p>}
 
       <div className="flex items-center gap-4">
@@ -451,6 +455,32 @@ function Area({
       <label className="etiqueta" htmlFor={id}>{etiqueta}</label>
       <textarea id={id} className="campo" rows={3} value={valor}
         onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+function Lista<T extends string>({
+  id, etiqueta, valor, opciones, etiquetas, onChange, error, vacio = "Selecciona…",
+}: {
+  id: string;
+  etiqueta: string;
+  valor: string;
+  opciones: readonly T[];
+  etiquetas: Record<T, string>;
+  onChange: (v: string) => void;
+  error?: string;
+  vacio?: string;
+}) {
+  return (
+    <div>
+      <label className="etiqueta" htmlFor={id}>{etiqueta}</label>
+      <select id={id} className="campo" value={valor}
+        aria-invalid={error ? "true" : undefined}
+        onChange={(e) => onChange(e.target.value)}>
+        <option value="">{vacio}</option>
+        {opciones.map((o) => <option key={o} value={o}>{etiquetas[o]}</option>)}
+      </select>
+      {error && <p className="error">{error}</p>}
     </div>
   );
 }
