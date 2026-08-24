@@ -81,40 +81,33 @@ export default async function VerDocumento({
   });
 
   /**
-   * 7.6 distingue VER de ENTREGAR.
+   * La validación ya NO bloquea la descarga (decisión de Jacob, 24/08/2026,
+   * que modifica el punto 7.6 del DERCAS): el comercial descarga el PDF en
+   * cuanto se genera.
    *
-   * El comercial ve siempre su propuesta en pantalla: la genera él, y sin
-   * poder leerla trabaja a ciegas hasta que alguien la valide. Lo que queda
-   * bloqueado hasta la validación es la DESCARGA, porque el PDF es lo que se
-   * reenvía por email y lo que acaba en manos del cliente.
-   *
-   * Este bloque solo decide qué se pinta. El control que de verdad cuenta está
-   * en el route handler del PDF, que devuelve 403 mientras `validado_en` sea
-   * null: una URL de descarga se comparte sin pensarlo, una pantalla no.
-   *
-   * Esta vista es siempre la del cliente — sin horas, sin suelo de negociación
-   * y sin desviación. Eso vive en /documentos/[id]/interno, con alcance total.
+   * `validado_en` se conserva y se sigue mostrando aquí porque documenta si
+   * la propuesta ha pasado revisión, y esa información le sirve al comercial
+   * para decidir si la manda ya o espera. Pero es un aviso, no una puerta.
    */
   const validado = Boolean(doc.validado_en);
 
   return (
     <>
       <div className="no-imprimir mx-auto flex max-w-[19cm] flex-wrap items-center justify-between gap-3 px-6 py-4">
-        <p className="traza">{documento.referencia}</p>
-        {validado ? (
-          <BotonDescargar id={id} />
-        ) : (
-          <p className="traza normal-case text-tinta-media">
-            Pendiente de validación · todavía no se puede descargar
-          </p>
-        )}
+        <p className="traza">
+          {documento.referencia}
+          {!validado && (
+            <span className="text-block"> · pendiente de validación</span>
+          )}
+        </p>
+        <BotonDescargar id={id} />
       </div>
 
       {!validado && (
         <div className="no-imprimir mx-auto max-w-[19cm] px-6 pb-4">
           <p className="border-l-2 border-block bg-elevado px-4 py-3 text-sm">
-            Así queda la propuesta. Jacob tiene que revisarla antes de que pueda
-            entregarse al cliente: hasta entonces el PDF no está disponible.
+            Esta propuesta todavía no la ha revisado Jacob. Puedes descargarla,
+            pero repásala antes de enviársela al cliente.
           </p>
         </div>
       )}

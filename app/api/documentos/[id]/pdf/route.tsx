@@ -25,21 +25,24 @@ export async function GET(
     return NextResponse.json({ error: "Sesión caducada" }, { status: 401 });
   }
 
+  /**
+   * La validación ya NO bloquea la descarga (decisión de Jacob, 24/08/2026,
+   * que modifica el punto 7.6 del DERCAS). Antes esta ruta devolvía 403
+   * mientras `validado_en` fuese null, y era el único control real: la
+   * comprobación de la pantalla se salta tecleando esta URL.
+   *
+   * `validado_en` se sigue registrando —la pantalla interna lo escribe y la
+   * del cliente lo muestra— pero como constancia de revisión, no como puerta.
+   * Quien pueda leer la fila puede descargar el PDF.
+   */
   const { data: doc } = await supabase
     .from("documentos")
-    .select("alcance, validado_en, lead_id")
+    .select("alcance, lead_id")
     .eq("id", id)
     .maybeSingle();
 
   if (!doc) {
     return NextResponse.json({ error: "No encontrado" }, { status: 404 });
-  }
-
-  if (!doc.validado_en) {
-    return NextResponse.json(
-      { error: "Este documento todavía no está validado. Jacob debe revisarlo." },
-      { status: 403 },
-    );
   }
 
   const { data: lead } = await supabase
@@ -60,8 +63,12 @@ export async function GET(
     precio: lead.precio_presentado,
   });
 
+  // El logo se lee por HTTP desde la propia app en vez de con `fs`: los
+  // ficheros de /public no siempre están en el sistema de archivos de una
+  // función serverless, pero la CDN siempre los sirve.
   const logo = new URL("/logo-advantys.png", request.url).toString();
 
+  // El cuerpo y las piezas se preparan a la vez: son independientes entre sí.
   const [cuerpo, piezas] = await Promise.all([
     renderToBuffer(<DocumentoPdf doc={documento} logo={logo} />),
     cargarPiezas(),
@@ -87,6 +94,9 @@ export async function GET(
 
   const nombre = `Propuesta-Advantys-${limpio}-${documento.referencia}.pdf`;
 
+  // `pdf-lib` devuelve un Uint8Array sobre ArrayBufferLike, que desde TS 5.7
+  // ya no encaja en BodyInit (podría ser un SharedArrayBuffer). Reenvolverlo
+  // fija el buffer a ArrayBuffer, que es lo que espera la Response.
   return new NextResponse(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
