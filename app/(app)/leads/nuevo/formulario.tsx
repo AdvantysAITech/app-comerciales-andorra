@@ -51,7 +51,7 @@ import Asistente from "./asistente";
 import RenderChecklist from "./checklist";
 import { BarraPasos, PASOS, type Paso } from "./pasos";
 import ArbolClasificacion from "./arbol";
-import GenerarDocumento from "./generar-documento";
+import GenerarDocumento from "../generar-documento";
 
 /** Fases de entrada de cada ruta, resueltas en servidor: el componente
  *  cliente nunca ve el mapa de IDs de GHL, solo id y nombre de lo que puede

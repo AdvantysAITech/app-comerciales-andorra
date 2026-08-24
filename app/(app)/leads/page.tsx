@@ -51,8 +51,27 @@ export default async function MisLeads() {
   if (soloMios) consulta = consulta.eq("comercial_id", sesion.usuario.id);
 
   const { data } = await consulta;
+  const leads = (data ?? []) as Fila[];
 
-  const filas: FilaLead[] = ((data ?? []) as Fila[]).map((lead) => {
+  /* ------------------------------------------------------------------ */
+  /* Documentos ya generados                                             */
+  /* ------------------------------------------------------------------ */
+
+  // Una sola consulta acotada a los leads de esta página, en vez de una por
+  // fila. La RLS de `documentos` sigue mandando: si el comercial no puede ver
+  // un documento, no vuelve, y su lead aparecerá como pendiente.
+  const documentoPorLead = new Map<string, string>();
+
+  if (leads.length > 0) {
+    const { data: documentos } = await supabase
+      .from("documentos")
+      .select("id, lead_id")
+      .in("lead_id", leads.map((l) => l.id));
+
+    for (const d of documentos ?? []) documentoPorLead.set(d.lead_id, d.id);
+  }
+
+  const filas: FilaLead[] = leads.map((lead) => {
     const fecha = new Date(lead.creado_en);
     return {
       id: lead.id,
@@ -88,6 +107,7 @@ export default async function MisLeads() {
       // Se resuelven aquí, en servidor, para no exponer el location id.
       enlaceContacto: enlaceContacto(lead.ghl_contacto_id),
       enlaceOportunidad: enlaceOportunidad(lead.ghl_oportunidad_id),
+      documentoId: documentoPorLead.get(lead.id) ?? null,
     };
   });
 
@@ -123,7 +143,7 @@ export default async function MisLeads() {
           </Link>
         </div>
       ) : (
-        <ListaLeads leads={filas} />
+        <ListaLeads leads={filas} puedeDocumentos={puedeVer(sesion, "documentos")} />
       )}
     </div>
   );

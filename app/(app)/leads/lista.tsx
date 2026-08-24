@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import GenerarDocumento from "./generar-documento";
 
 export type FilaLead = {
   id: string;
@@ -18,6 +19,8 @@ export type FilaLead = {
   bantTexto: string | null;
   enlaceContacto: string | null;
   enlaceOportunidad: string | null;
+  /** Id del documento ya generado, si lo hay. Null = todavía no tiene. */
+  documentoId: string | null;
 };
 
 type Estado = { etiqueta: string; bloqueo: boolean };
@@ -35,7 +38,14 @@ function estadoDe(resultado: string): Estado {
   );
 }
 
-export default function ListaLeads({ leads }: { leads: FilaLead[] }) {
+export default function ListaLeads({
+  leads,
+  puedeDocumentos,
+}: {
+  leads: FilaLead[];
+  /** Sin el módulo de documentos concedido, la propuesta no se ofrece. */
+  puedeDocumentos: boolean;
+}) {
   const [abierto, setAbierto] = useState<FilaLead | null>(null);
 
   // Escape para cerrar y bloqueo del scroll de fondo: sin esto, en móvil el
@@ -85,13 +95,31 @@ export default function ListaLeads({ leads }: { leads: FilaLead[] }) {
         ))}
       </ul>
 
-      {abierto && <Ficha lead={abierto} cerrar={() => setAbierto(null)} />}
+      {abierto && (
+        <Ficha
+          lead={abierto}
+          puedeDocumentos={puedeDocumentos}
+          cerrar={() => setAbierto(null)}
+        />
+      )}
     </>
   );
 }
 
-function Ficha({ lead, cerrar }: { lead: FilaLead; cerrar: () => void }) {
-    const estado = estadoDe(lead.resultado);
+function Ficha({
+  lead,
+  puedeDocumentos,
+  cerrar,
+}: {
+  lead: FilaLead;
+  puedeDocumentos: boolean;
+  cerrar: () => void;
+}) {
+  const estado = estadoDe(lead.resultado);
+
+  // Solo un lead cerrado como 'creado' tiene alcance que documentar: el
+  // endpoint rechaza el resto con un 409, así que no se ofrece el botón.
+  const ofrecerPropuesta = puedeDocumentos && lead.resultado === "creado";
 
   return (
     <div
@@ -132,6 +160,12 @@ function Ficha({ lead, cerrar }: { lead: FilaLead; cerrar: () => void }) {
             valor={lead.contactoExistia ? "Ya existía, se actualizó" : "Creado nuevo"}
           />
           <Dato titulo="Resultado" valor={estado.etiqueta} bloqueo={estado.bloqueo} />
+          {ofrecerPropuesta && (
+            <Dato
+              titulo="Propuesta"
+              valor={lead.documentoId ? "Generada" : "Todavía sin generar"}
+            />
+          )}
         </dl>
 
         {lead.detalle && (
@@ -141,6 +175,10 @@ function Ficha({ lead, cerrar }: { lead: FilaLead; cerrar: () => void }) {
         )}
 
         <div className="mt-7 flex flex-col gap-2">
+          {/* Acción principal arriba: es a lo que se entra a esta ficha. */}
+          {ofrecerPropuesta && (
+            <GenerarDocumento leadId={lead.id} documentoId={lead.documentoId} ancho />
+          )}
           {lead.enlaceContacto ? (
             <a
               href={lead.enlaceContacto}
