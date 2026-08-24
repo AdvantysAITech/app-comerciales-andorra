@@ -35,6 +35,12 @@ export async function GET(
     return NextResponse.json({ error: "No encontrado" }, { status: 404 });
   }
 
+  /**
+   * 7.6: el documento de cliente no se descarga hasta que Jacob valida.
+   *
+   * Esta es la comprobación que de verdad cuenta. La de la página se salta
+   * tecleando esta URL, y esta URL es justo la que se comparte.
+   */
   if (!doc.validado_en) {
     return NextResponse.json(
       { error: "Este documento todavía no está validado. Jacob debe revisarlo." },
@@ -60,8 +66,12 @@ export async function GET(
     precio: lead.precio_presentado,
   });
 
+  // El logo y las piezas fijas se leen por HTTP desde la propia app en vez de
+  // con `fs`: los ficheros de /public no siempre están en el sistema de
+  // archivos de una función serverless, pero la CDN siempre los sirve.
   const logo = new URL("/logo-advantys.png", request.url).toString();
 
+  // El cuerpo y las piezas se piden a la vez: son independientes entre sí.
   const [cuerpo, piezas] = await Promise.all([
     renderToBuffer(<DocumentoPdf doc={documento} logo={logo} />),
     cargarPiezas(),
@@ -87,6 +97,9 @@ export async function GET(
 
   const nombre = `Propuesta-Advantys-${limpio}-${documento.referencia}.pdf`;
 
+  // `pdf-lib` devuelve un Uint8Array sobre ArrayBufferLike, que desde TS 5.7
+  // ya no encaja en BodyInit (podría ser un SharedArrayBuffer). Reenvolverlo
+  // fija el buffer a ArrayBuffer, que es lo que espera la Response.
   return new NextResponse(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
