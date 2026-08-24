@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import GenerarDocumento from "./generar-documento";
 
 export type FilaLead = {
@@ -46,7 +48,16 @@ export default function ListaLeads({
   /** Sin el módulo de documentos concedido, la propuesta no se ofrece. */
   puedeDocumentos: boolean;
 }) {
+  const router = useRouter();
   const [abierto, setAbierto] = useState<FilaLead | null>(null);
+
+  /** Id del lead en el que se ha pulsado Borrar y está esperando confirmación.
+   *  La confirmación vive en la propia fila: un diálogo aparte para algo tan
+   *  frecuente acaba confirmándose sin leerlo. */
+  const [confirmando, setConfirmando] = useState<string | null>(null);
+  const [borrando, setBorrando] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
 
   // Escape para cerrar y bloqueo del scroll de fondo: sin esto, en móvil el
   // listado se desplaza por debajo del panel mientras lo lees.
@@ -62,37 +73,132 @@ export default function ListaLeads({
     };
   }, [abierto]);
 
+  async function borrar(lead: FilaLead) {
+    setBorrando(lead.id);
+    setError(null);
+    setAviso(null);
+
+    try {
+      const res = await fetch(`/api/leads/${lead.id}`, { method: "DELETE" });
+
+      const crudo = await res.text();
+      let data: { error?: string; contacto?: boolean; motivoContacto?: string } | null = null;
+      try {
+        data = JSON.parse(crudo);
+      } catch {
+        data = null;
+      }
+
+      if (!res.ok) {
+        setError(data?.error ?? `El servidor respondió ${res.status}.`);
+        return;
+      }
+
+      // El contacto puede haber sobrevivido a propósito. Se dice, en vez de
+      // dejar creer que ha desaparecido todo del CRM.
+      if (data?.contacto === false && data.motivoContacto) {
+        setAviso(`Lead borrado. El contacto sigue en el CRM: ${data.motivoContacto}`);
+      }
+
+      setConfirmando(null);
+      router.refresh();
+    } catch {
+      setError("No hay conexión con el servidor. No se ha borrado nada.");
+    } finally {
+      setBorrando(null);
+    }
+  }
+
   return (
     <>
+      {error && <p className="error mb-4">{error}</p>}
+      {aviso && (
+        <p className="mb-4 border-l-2 border-accent bg-accent-soft px-5 py-4 text-sm">{aviso}</p>
+      )}
+
       <ul className="divide-y divide-line border border-line bg-surface">
-        {leads.map((lead) => (
-          <li key={lead.id}>
-            <button
-              type="button"
-              onClick={() => setAbierto(lead)}
-              // min-h-14: objetivo táctil cómodo en móvil, no una fila de 32px.
-              className="flex min-h-14 w-full items-baseline justify-between gap-4 px-4 py-3 text-left hover:bg-elevado"
-            >
-              <span className="min-w-0">
-                <span className="block truncate font-medium">
-                  {lead.nombre}
-                  <span className="text-tinta-media"> · {lead.empresa}</span>
-                </span>
-                <span className="traza mt-0.5 block truncate normal-case">
-                  {lead.clasificacion}
-                </span>
-              </span>
-              <span className="shrink-0 text-right">
-                {estadoDe(lead.resultado).bloqueo && (
-                  <span className="traza block text-block">
-                    {estadoDe(lead.resultado).etiqueta}
+        {leads.map((lead) => {
+          const estado = estadoDe(lead.resultado);
+          const enConfirmacion = confirmando === lead.id;
+
+          return (
+            <li key={lead.id} className="flex flex-wrap items-center gap-y-2">
+              {/* El área principal abre la ficha. Va en su propio botón y no
+                  envolviendo a los demás: un botón dentro de otro botón es
+                  HTML inválido y en móvil se dispara el que no toca. */}
+              <button
+                type="button"
+                onClick={() => setAbierto(lead)}
+                // min-h-14: objetivo táctil cómodo en móvil, no una fila de 32px.
+                className="flex min-h-14 flex-1 items-baseline justify-between gap-4 px-4 py-3 text-left hover:bg-elevado"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">
+                    {lead.nombre}
+                    <span className="text-tinta-media"> · {lead.empresa}</span>
                   </span>
+                  <span className="traza mt-0.5 block truncate normal-case">
+                    {lead.clasificacion}
+                  </span>
+                </span>
+                <span className="shrink-0 text-right">
+                  {estado.bloqueo && (
+                    <span className="traza block text-block">{estado.etiqueta}</span>
+                  )}
+                  <span className="traza block">{lead.fechaCorta}</span>
+                </span>
+              </button>
+
+              <div className="flex shrink-0 items-center gap-2 px-4 py-2">
+                {enConfirmacion ? (
+                  <>
+                    <span className="traza normal-case text-block">¿Seguro?</span>
+                    <button
+                      type="button"
+                      className="boton-fantasma !border-block !text-block"
+                      onClick={() => borrar(lead)}
+                      disabled={borrando === lead.id}
+                    >
+                      {borrando === lead.id ? "Borrando…" : "Sí, borrar"}
+                    </button>
+                    <button
+                      type="button"
+                      className="boton-fantasma"
+                      onClick={() => setConfirmando(null)}
+                      disabled={borrando === lead.id}
+                    >
+                      No
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {lead.resultado === "creado" && (
+                      <Link
+                        href={`/leads/${lead.id}/editar`}
+                        className="boton-fantasma"
+                        aria-label={`Editar ${lead.nombre}`}
+                      >
+                        Editar
+                      </Link>
+                    )}
+                    <button
+                      type="button"
+                      className="boton-fantasma !border-block !text-block"
+                      onClick={() => {
+                        setError(null);
+                        setAviso(null);
+                        setConfirmando(lead.id);
+                      }}
+                      aria-label={`Borrar ${lead.nombre}`}
+                    >
+                      Borrar
+                    </button>
+                  </>
                 )}
-                <span className="traza block">{lead.fechaCorta}</span>
-              </span>
-            </button>
-          </li>
-        ))}
+              </div>
+            </li>
+          );
+        })}
       </ul>
 
       {abierto && (
@@ -105,6 +211,8 @@ export default function ListaLeads({
     </>
   );
 }
+
+/* ------------------------------------------------------------------ */
 
 function Ficha({
   lead,
@@ -174,8 +282,10 @@ function Ficha({
           </p>
         )}
 
+        {/* Editar y borrar NO están aquí: viven en la fila del listado, donde
+            se ven sin abrir nada. Esta ficha es para consultar y para la
+            propuesta. */}
         <div className="mt-7 flex flex-col gap-2">
-          {/* Acción principal arriba: es a lo que se entra a esta ficha. */}
           {ofrecerPropuesta && (
             <GenerarDocumento leadId={lead.id} documentoId={lead.documentoId} ancho />
           )}
