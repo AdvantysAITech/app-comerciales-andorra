@@ -343,3 +343,118 @@
     padding: 1.5rem;
   }
 }
+
+/* ================================================================
+   Documento de cliente. Independiente del tema de la aplicación:
+   esto se imprime y acaba en manos del cliente.
+   ================================================================ */
+
+.documento {
+  --tinta: #1a1a1a;
+  --tinta-suave: #555;
+  --linea: #d8d4cd;
+  --acento: #c8553d;
+
+  max-width: 19cm;
+  margin: 0 auto;
+  padding: 2cm 1.5cm;
+  background: #fff;
+  color: var(--tinta);
+  font-size: 10.5pt;
+  line-height: 1.6;
+}
+
+.documento .portada {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid var(--tinta);
+}
+
+.documento .logo {
+  width: 180px;
+  height: auto;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.documento .cabecera-datos {
+  text-align: right;
+  font-size: 9pt;
+  color: var(--tinta-suave);
+}
+.documento .ref { font-weight: 600; letter-spacing: 0.04em; color: var(--tinta); }
+
+.documento .titulo { margin: 2.5rem 0 3rem; }
+.documento .traza-doc {
+  font-size: 8.5pt;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--acento);
+}
+.documento h1 { font-size: 26pt; font-weight: 600; margin-top: 0.4rem; line-height: 1.15; }
+
+.documento .lead { font-size: 12pt; line-height: 1.55; color: var(--tinta); }
+
+.documento section { margin-bottom: 2.2rem; }
+
+.documento h2 {
+  font-size: 9pt;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--tinta-suave);
+  padding-bottom: 0.4rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--linea);
+}
+
+.documento h3 { font-size: 11pt; font-weight: 600; margin-bottom: 0.2rem; }
+
+.documento .bloque { margin-bottom: 1.1rem; padding-left: 0.9rem; border-left: 2px solid var(--linea); }
+.documento .bloque p { color: var(--tinta-suave); }
+
+.documento ul { padding-left: 1.1rem; }
+.documento li { margin-bottom: 0.4rem; }
+
+.documento .inversion { padding: 1.4rem; background: #faf8f5; border: 1px solid var(--linea); }
+.documento .importe { font-size: 24pt; font-weight: 600; margin-bottom: 1rem; }
+.documento .inversion table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+.documento .inversion td { padding: 0.45rem 0; border-top: 1px solid var(--linea); }
+.documento .inversion .pct { text-align: right; font-variant-numeric: tabular-nums; }
+
+.documento .notas {
+  margin-top: 1.2rem;
+  font-size: 9pt;
+  color: var(--tinta-suave);
+  list-style: none;
+  padding-left: 0;
+}
+.documento .notas li { padding-left: 0.9rem; border-left: 2px solid var(--linea); }
+
+.documento footer {
+  margin-top: 3rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--linea);
+  font-size: 8.5pt;
+  color: var(--tinta-suave);
+  text-align: center;
+}
+
+@media print {
+  @page { size: A4; margin: 1.4cm; }
+
+  /* La app entera se oculta: solo se imprime el documento. */
+  body * { visibility: hidden; }
+  .documento, .documento * { visibility: visible; }
+  .documento { position: absolute; inset: 0; padding: 0; max-width: none; }
+
+  /* Sin esto, Chrome no imprime el fondo del bloque de inversión. */
+  .documento .inversion { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* Que no se parta un bloque de alcance entre dos páginas. */
+  .documento section, .documento .bloque { break-inside: avoid; }
+  .documento h2 { break-after: avoid; }
+
+  .no-imprimir { display: none !important; }
+}

@@ -51,6 +51,7 @@ import Asistente from "./asistente";
 import RenderChecklist from "./checklist";
 import { BarraPasos, PASOS, type Paso } from "./pasos";
 import ArbolClasificacion from "./arbol";
+import GenerarDocumento from "./generar-documento";
 
 /** Fases de entrada de cada ruta, resueltas en servidor: el componente
  *  cliente nunca ve el mapa de IDs de GHL, solo id y nombre de lo que puede
@@ -96,7 +97,12 @@ const OBLIGATORIOS: [keyof Campos, string][] = [
   ["facturacion", "Selecciona la facturación"],
 ];
 
-type Exito = { contactoId: string; oportunidadId: string; contactoExistia: boolean };
+type Exito = {
+  contactoId: string;
+  oportunidadId: string;
+  contactoExistia: boolean;
+  leadId?: string;
+};
 
 export default function FormularioLead({
   spinoffs,
@@ -334,7 +340,8 @@ export default function FormularioLead({
           La oportunidad está en la fase que has elegido.
         </p>
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-          <button className="boton" onClick={otroLead}>Dar de alta otro</button>
+          {exito.leadId && <GenerarDocumento leadId={exito.leadId} />}
+          <button className="boton-fantasma" onClick={otroLead}>Dar de alta otro</button>
           <Link href="/leads" className="boton-fantasma inline-block">Ver mis leads</Link>
         </div>
       </div>

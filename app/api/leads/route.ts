@@ -266,7 +266,7 @@ export async function POST(request: Request) {
       contactoId: contacto.id,
       oportunidadId: oportunidad.id,
       contactoExistia: !contacto.nuevo,
-      // Solo lo que el comercial puede ver.
+      leadId: filaId,
       precio: calculo.presentado,
       estado: calculo.estado,
       avisos: calculo.avisos,

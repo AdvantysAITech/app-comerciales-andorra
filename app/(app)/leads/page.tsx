@@ -39,14 +39,9 @@ export default async function MisLeads() {
 
   const supabase = await supabaseServer();
 
-  // El alcance `propio` de lib/permisos.ts estaba modelado desde el principio
-  // pero no se aplicaba: la consulta era un select("*") pelado bajo el título
-  // "Mis leads", y Antonio José y Samuel se veían los leads el uno del otro.
-  //
-  // Este filtro es la mitad del arreglo. La otra mitad es la RLS de
-  // 2026-08-24-rls-leads.sql: filtrar solo aquí protege la PANTALLA, no los
-  // DATOS — cualquiera con el token de sesión puede consultar la tabla por su
-  // cuenta. Las dos capas, no una.
+  // El filtro protege la PANTALLA; la RLS de la tabla protege los DATOS.
+  // Las dos capas, no una: filtrar solo aquí deja la tabla abierta a quien
+  // consulte con su propio token de sesión.
   let consulta = supabase
     .from("leads")
     .select("*")
@@ -98,12 +93,23 @@ export default async function MisLeads() {
 
   return (
     <div>
-      <p className="traza">
-        {soloMios ? "Altas hechas desde esta app" : `Altas de todo el equipo · alcance ${alcance}`}
-      </p>
-      <h1 className="mt-2 mb-8 text-2xl font-semibold tracking-tight">
-        {soloMios ? "Mis leads" : "Leads del equipo"}
-      </h1>
+      {/* El botón de alta vive en la cabecera y NO dentro del estado vacío.
+          Antes solo aparecía con la lista a cero: en cuanto había un lead,
+          el comercial se quedaba sin forma de crear el siguiente desde aquí. */}
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="traza">
+            {soloMios ? "Altas hechas desde esta app" : `Altas del equipo · alcance ${alcance}`}
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight">
+            {soloMios ? "Mis leads" : "Leads del equipo"}
+          </h1>
+        </div>
+
+        <Link href="/leads/nuevo" className="boton">
+          Nuevo lead
+        </Link>
+      </div>
 
       {filas.length === 0 ? (
         <div className="border border-dashed border-line p-10 text-center">
