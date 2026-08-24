@@ -6,6 +6,8 @@ import {
   CAMPO_BANT,
   CAMPO_OPORTUNIDAD,
   pipelineDestino,
+  faseInicial,
+  faseValida,
 } from "./ids";
 import { ETIQUETA_LINEA, ETIQUETA_ROL, type LineaNegocio, type RolJV } from "@/lib/domain/tipos";
 import {
@@ -22,6 +24,7 @@ import {
   ESTADO_PRESUPUESTO_INICIAL,
   type Servicio,
   type Modalidad,
+  EstadoPresupuesto,
 } from "@/lib/domain/servicio";
 
 
@@ -32,12 +35,15 @@ export type DatosOportunidad = {
   spinoffId?: string;
   spinoffNombre?: string;
   valorEstimado?: number;
+  ruta?: string;
   pain?: string;
   bant?: RespuestasBant;
   servicio?: Servicio;
   modalidad?: Modalidad;
   procesos?: readonly string[];
   uuid: string;
+  faseId?: string;
+  estadoPresupuesto?: EstadoPresupuesto;
 };
 
 /**
@@ -73,22 +79,28 @@ function camposBant(bant: RespuestasBant | undefined) {
 }
 
 function nombreOportunidad(d: DatosOportunidad): string {
-  if (d.linea === "jv_builder" && d.rolJV)
+  if (d.linea === "jv_builder" && d.rolJV) {
     return `${d.empresa} — ${d.spinoffNombre} — ${ETIQUETA_ROL[d.rolJV]}`;
-  if (d.linea === "iso42001") return `${d.empresa} — Implantación ISO 42001`;
-  return `${d.empresa} — Consultoría`;
+  }
+  if (d.servicio) return `${d.empresa} — ${ETIQUETA_SERVICIO[d.servicio]}`;
+  return `${d.empresa} — ${ETIQUETA_LINEA[d.linea]}`;
 }
 
 export async function crearOportunidad(d: DatosOportunidad, contactoId: string) {
   const destino = pipelineDestino(d.linea, d.rolJV);
   const bant = camposBant(d.bant);
 
+  const faseId =
+      d.faseId && faseValida(d.linea, d.rolJV, d.faseId)
+        ? d.faseId
+        : faseInicial(d.linea, d.rolJV);
+
   const res = await ghl<{ opportunity?: { id: string } }>("/opportunities/", {
     method: "POST",
     body: {
       locationId: locationId(),
       pipelineId: destino.id,
-      pipelineStageId: destino.primeraFase,
+      pipelineStageId: faseId,
       name: nombreOportunidad(d),
       status: "open",
       contactId: contactoId,
@@ -96,6 +108,9 @@ export async function crearOportunidad(d: DatosOportunidad, contactoId: string) 
       customFields: [
         ...campo(CAMPO_OPORTUNIDAD.linea_negocio, ETIQUETA_LINEA[d.linea]),
         ...campo(CAMPO_OPORTUNIDAD.rol_jv, d.rolJV ? ETIQUETA_ROL[d.rolJV] : undefined),
+        ...campo(CAMPO_OPORTUNIDAD.pain_declarado, d.pain),
+        ...campoMulti(CAMPO_OPORTUNIDAD.procesos_criticos, d.procesos),
+        ...campo(CAMPO_OPORTUNIDAD.ruta, d.ruta),
         ...campo(CAMPO_OPORTUNIDAD.pain_declarado, d.pain),
         ...campoMulti(CAMPO_OPORTUNIDAD.procesos_criticos, d.procesos),
         ...campo(
@@ -108,7 +123,7 @@ export async function crearOportunidad(d: DatosOportunidad, contactoId: string) 
         ),
         ...campo(
           CAMPO_OPORTUNIDAD.estado_presupuesto,
-          ETIQUETA_ESTADO_PRESUPUESTO[ESTADO_PRESUPUESTO_INICIAL],
+          ETIQUETA_ESTADO_PRESUPUESTO[d.estadoPresupuesto ?? ESTADO_PRESUPUESTO_INICIAL],
         ),
         ...campo(CAMPO_OPORTUNIDAD.uuid_app_comercial, d.uuid),
         ...bant.campos,

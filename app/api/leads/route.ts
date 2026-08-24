@@ -8,61 +8,94 @@ import {
   ETIQUETA_FACTURACION,
   ETIQUETA_PROCESO
 } from "@/lib/domain/lead";
+import { DEFINICION_RUTA, ETIQUETA_RUTA, requiereSpinoff } from "@/lib/domain/rutas";
 import { ETIQUETA_LINEA, ETIQUETA_ROL } from "@/lib/domain/tipos";
-import { CLASIFICACION, PREGUNTAS_BANT, calcularBant } from "@/lib/domain/bant";
+import { CLASIFICACION, calcularBant } from "@/lib/domain/bant";
+import {
+  CHECKLISTS,
+  SPINOFF,
+  validar,
+  type RespuestasChecklist,
+} from "@/lib/domain/checklists";
+import { calcularPrecio } from "@/lib/precios";
 import { supabaseServer } from "@/lib/supabase/server";
 import { crearNota, upsertContacto } from "@/lib/ghl/contactos";
 import { crearOportunidad, vincularSpinoff } from "@/lib/ghl/oportunidades";
-
 
 /** Violación de índice único en Postgres. */
 const CLAVE_DUPLICADA = "23505";
 
 export async function POST(request: Request) {
   const supabase = await supabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Sesión caducada" }, { status: 401 });
 
-  // CA-07a / CA-07b: sin clasificación completa no se guarda nada.
   const parsed = leadSchema.safeParse(await request.json());
   if (!parsed.success) {
     const errores: Record<string, string> = {};
     for (const issue of parsed.error.issues) errores[String(issue.path[0])] = issue.message;
     return NextResponse.json({ error: "Faltan campos obligatorios", errores }, { status: 422 });
   }
+
   const lead = parsed.data;
-  const esJV = lead.linea === "jv_builder";
+  const definicion = DEFINICION_RUTA[lead.ruta];
+  const esSpinoff = requiereSpinoff(lead.ruta);
   const bant = calcularBant(lead.bant);
+  const checklist = lead.checklist as RespuestasChecklist;
+
+  /* ---------------------------------------------------------------- */
+  /* Validación del checklist                                          */
+  /* ---------------------------------------------------------------- */
+
+  // Se repite en servidor lo que ya validó el navegador. No es desconfianza
+  // del comercial: es que el POST se puede lanzar sin pasar por la pantalla, y
+  // un checklist incompleto produce un documento incompleto.
+  const conContexto = lead.spinoffClave
+    ? { ...checklist, [SPINOFF]: lead.spinoffClave }
+    : checklist;
+
+  const fallosChecklist = validar(CHECKLISTS[lead.ruta], conContexto);
+  if (Object.keys(fallosChecklist).length > 0) {
+    return NextResponse.json(
+      { error: "El checklist está incompleto", errores: fallosChecklist },
+      { status: 422 },
+    );
+  }
 
   /* ---------------------------------------------------------------- */
   /* Resolución de la spin-off                                         */
   /* ---------------------------------------------------------------- */
 
+  // El cliente solo manda la clave interna. El id de GHL y el nombre visible
+  // salen de la caché, nunca del navegador.
   let spinoffGhlId: string | null = null;
   let spinoffNombre: string | null = null;
 
-  if (esJV) {
+  if (esSpinoff) {
     const { data: spinoff } = await supabase
       .from("spinoffs_cache")
       .select("ghl_id, nombre")
-      .eq("clave_interna", lead.spinoffClave)
+      .eq("clave_interna", lead.spinoffClave!)
       .maybeSingle();
 
     if (!spinoff) {
       return NextResponse.json(
-        {
-          error: "Esa spin-off no está disponible",
-          errores: { spinoffClave: "Vuelve a seleccionarla" },
-        },
+        { error: "Esa spin-off no está disponible", errores: { spinoffClave: "Vuelve a seleccionarla" } },
         { status: 422 },
       );
     }
-
     spinoffGhlId = spinoff.ghl_id;
     spinoffNombre = spinoff.nombre;
   }
+
+  /* ---------------------------------------------------------------- */
+  /* Precio                                                            */
+  /* ---------------------------------------------------------------- */
+
+  // Se calcula en servidor y NO se devuelve entero al navegador: el objeto
+  // Calculo lleva el suelo de negociación y el desglose, que la sección 8
+  // prohíbe enseñar al comercial. Solo sale lo que filtra paraComercial().
+  const calculo = calcularPrecio({ ruta: lead.ruta, respuestas: conContexto });
 
   const datos = {
     uuid_origen: lead.uuid,
@@ -72,25 +105,31 @@ export async function POST(request: Request) {
     email: lead.email,
     telefono: lead.telefono,
     empresa: lead.empresa,
-    linea_negocio: lead.linea,
+    ruta: lead.ruta,
+    linea_negocio: definicion.linea,
+    servicio: definicion.servicio ?? null,
     bant_score: bant.respondidas > 0 ? bant.total : null,
     bant_clasificacion: bant.respondidas > 0 ? bant.clasificacion : null,
     bant_completo: bant.completo,
-    rol_jv: esJV ? lead.rolJV : null,
-    spinoff_clave: esJV ? lead.spinoffClave : null,
+    rol_jv: definicion.rolJV ?? null,
+    spinoff_clave: lead.spinoffClave ?? null,
     spinoff_id: spinoffGhlId,
     spinoff_nombre: spinoffNombre,
-    servicio: lead.servicio ?? null,
-    modalidad: lead.modalidad ?? null,
+    checklist: lead.checklist,
+    arbol: lead.arbol,
+    precio_presentado: calculo.presentado,
+    precio_suelo: calculo.suelo,
+    precio_desglose: calculo.desglose,
+    precio_version: calculo.version,
+    estado_presupuesto: calculo.estado,
+    motivos_revision: calculo.motivos,
+    procesos: lead.procesos,
   };
 
   /* ---------------------------------------------------------------- */
   /* 1. Reserva — el candado de idempotencia                           */
   /* ---------------------------------------------------------------- */
 
-  // Se inserta ANTES de tocar GHL, no después. Escribir el registro al final
-  // deja la ventana abierta justo donde duele: dos peticiones con el mismo
-  // UUID crearían dos oportunidades.
   let filaId: string;
 
   const { data: reserva, error: errorReserva } = await supabase
@@ -99,15 +138,22 @@ export async function POST(request: Request) {
     .select("id")
     .single();
 
-  if (errorReserva) {
+    if (errorReserva) {
     if (errorReserva.code !== CLAVE_DUPLICADA) {
+      // El detalle va al log del servidor, no a la respuesta: puede contener
+      // nombres de columna y restricciones, y eso no se le enseña al navegador.
+      console.error("[leads] insert falló", {
+        code: errorReserva.code,
+        message: errorReserva.message,
+        details: errorReserva.details,
+        hint: errorReserva.hint,
+      });
       return NextResponse.json(
         { error: "No se pudo registrar el lead. Inténtalo de nuevo." },
         { status: 500 },
       );
     }
 
-    // Ya hay una fila con este UUID: es un reintento o una doble pulsación.
     const { data: previo } = await supabase
       .from("leads")
       .select("id, resultado, ghl_contacto_id, ghl_oportunidad_id, contacto_existia")
@@ -117,10 +163,7 @@ export async function POST(request: Request) {
     if (!previo) {
       return NextResponse.json({ error: "No se pudo recuperar el lead." }, { status: 500 });
     }
-
     if (previo.resultado === "creado") {
-      // El primer intento sí llegó. Se devuelve su resultado tal cual: para el
-      // comercial es un éxito, y en GHL sigue habiendo un único registro.
       return NextResponse.json({
         contactoId: previo.ghl_contacto_id,
         oportunidadId: previo.ghl_oportunidad_id,
@@ -128,7 +171,6 @@ export async function POST(request: Request) {
         repetido: true,
       });
     }
-
     if (previo.resultado === "en_curso") {
       return NextResponse.json(
         { error: "Este lead se está guardando ahora mismo. Espera unos segundos." },
@@ -136,10 +178,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // El intento anterior falló: se reutiliza la fila y se vuelve a intentar.
     filaId = previo.id;
-    await supabase
-      .from("leads")
+    await supabase.from("leads")
       .update({ ...datos, resultado: "en_curso", detalle: null })
       .eq("id", filaId);
   } else {
@@ -173,58 +213,47 @@ export async function POST(request: Request) {
     const oportunidad = await crearOportunidad(
       {
         empresa: lead.empresa,
-        linea: lead.linea,
-        rolJV: esJV ? lead.rolJV : undefined,
+        linea: definicion.linea,
+        rolJV: definicion.rolJV,
         spinoffId: spinoffGhlId ?? undefined,
         spinoffNombre: spinoffNombre ?? undefined,
-        valorEstimado: lead.valorEstimado,
-        pain: lead.pain,
+        faseId: lead.faseId,
+        valorEstimado: calculo.presentado ?? lead.valorEstimado,
+        servicio: definicion.servicio,
+        estadoPresupuesto: calculo.estado,
         bant: lead.bant,
-        servicio: lead.servicio,
-        modalidad: lead.modalidad,
-        procesos: lead.procesos.map((p) => ETIQUETA_PROCESO[p]),
         uuid: lead.uuid,
+        ruta: ETIQUETA_RUTA[lead.ruta],
+        pain: (() => {
+          const id = CHECKLISTS[lead.ruta].contexto;
+          const valor = id ? conContexto[id] : undefined;
+          return typeof valor === "string" ? valor : undefined;
+        })(),
+        procesos: lead.procesos.map((p) => ETIQUETA_PROCESO[p]),
       },
       contacto.id,
     );
 
-    // La spin-off es una asociación aparte, no un campo de la oportunidad.
-    if (spinoffGhlId) {
-      await vincularSpinoff(spinoffGhlId, oportunidad.id);
-    }
-
-    const clasificacion = esJV
-      ? `${ETIQUETA_LINEA[lead.linea]} · ${spinoffNombre} · ${ETIQUETA_ROL[lead.rolJV]}`
-      : ETIQUETA_LINEA[lead.linea];
-
-    // La nota deja por escrito de dónde sale el score. Si alguien discute un
-    // WARM, se ve qué se preguntó y qué se dejó en blanco, sin abrir la app.
-    const detalleBant = PREGUNTAS_BANT.map((p) => {
-      const opcion = p.opciones.find((o) => o.valor === lead.bant[p.id]);
-      return `· ${p.etiqueta}: ${
-        opcion
-          ? `${opcion.etiquetaGhl} (${(opcion.puntosX100 / 100).toLocaleString("es-ES")} pt)`
-          : "sin dato"
-      }`;
-    });
+    if (spinoffGhlId) await vincularSpinoff(spinoffGhlId, oportunidad.id);
 
     await crearNota(
       contacto.id,
       [
         `Alta desde la App Comercial por ${user.email}.`,
-        `Clasificación: ${clasificacion}.`,
+        `Ruta: ${ETIQUETA_RUTA[lead.ruta]} — ${definicion.nombre}.`,
+        esSpinoff ? `Spin-off: ${spinoffNombre} · ${ETIQUETA_ROL[definicion.rolJV!]}.` : null,
         bant.respondidas > 0
-          ? `BANT: ${bant.total}/10 — ${CLASIFICACION[bant.clasificacion].tag}${
-              bant.completo
-                ? ""
-                : ` (provisional, ${bant.respondidas}/6 respondidas, techo ${bant.techo})`
-            }`
+          ? `BANT: ${bant.total}/10 — ${CLASIFICACION[bant.clasificacion].tag}` +
+            (bant.completo ? "" : ` (provisional, ${bant.respondidas}/6)`)
           : "BANT: sin cualificar todavía.",
-        ...detalleBant,
+        calculo.presentado !== null
+          ? `Presupuesto: ${calculo.presentado.toLocaleString("es-ES")} € · ${calculo.estado}.`
+          : `Presupuesto: ${calculo.estado}.`,
+        // Los motivos de revisión van a la nota de GHL, que solo ven Jacob y el
+        // equipo interno. Nunca al documento del cliente.
+        ...calculo.motivos.map((m) => `· ${m}`),
         lead.notas ? `Observaciones: ${lead.notas}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n"),
+      ].filter(Boolean).join("\n"),
     );
 
     await cerrar("creado", {
@@ -237,7 +266,10 @@ export async function POST(request: Request) {
       contactoId: contacto.id,
       oportunidadId: oportunidad.id,
       contactoExistia: !contacto.nuevo,
-      bant: bant.respondidas > 0 ? bant : null,
+      // Solo lo que el comercial puede ver.
+      precio: calculo.presentado,
+      estado: calculo.estado,
+      avisos: calculo.avisos,
     });
   } catch (error) {
     const detalle = error instanceof Error ? error.message : "Error desconocido";

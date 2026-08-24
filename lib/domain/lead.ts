@@ -2,6 +2,7 @@ import { z } from "zod";
 import { LINEAS, ROLES_JV, type LineaNegocio, type RolJV } from "./tipos";
 import { PREGUNTAS_BANT, type CriterioBant } from "./bant";
 import { SERVICIOS, MODALIDADES, serviciosDisponibles, type Servicio } from "./servicio";
+import { RUTAS, requiereSpinoff } from "./rutas";
 
 export const FUENTES = [
   "linkedin",
@@ -135,52 +136,28 @@ const base = z.object({
   web: z.union([z.string().trim().url("La web tiene que empezar por https://"), z.literal("")]).optional(),
   fuente: z.enum(FUENTES),
   idioma: z.enum(IDIOMAS),
-  valorEstimado: z.number().nonnegative().optional(),
-  pain: z.string().trim().optional(),
-  notas: z.string().trim().optional(),
-  uuid: z.uuid("Falta el identificador del lead"),
-  bant: bantSchema.default({}),
   sector: z.enum(SECTORES),
   empleados: z.enum(EMPLEADOS),
   facturacion: z.enum(FACTURACION),
   herramientas: z.string().trim().optional(),
-  servicio: z.enum(SERVICIOS).optional(),
-  modalidad: z.enum(MODALIDADES).optional(),
+  valorEstimado: z.number().nonnegative().optional(),
+  notas: z.string().trim().optional(),
+  uuid: z.uuid("Falta el identificador del lead"),
+  bant: bantSchema.default({}),
+  ruta: z.enum(RUTAS),
+  spinoffClave: z.string().optional(),
+  faseId: z.string().optional(),
+  checklist: z.record(z.string(), z.unknown()).default({}),
+  arbol: z.record(z.string(), z.string()).default({}),
   procesos: z.array(z.enum(PROCESOS)).default([]),
 });
 
-const leadUnion = z.discriminatedUnion("linea", [
-  base.extend({ linea: z.literal("consultoria") }),
-  base.extend({ linea: z.literal("iso42001") }),
-  base.extend({
-    linea: z.literal("jv_builder"),
-    spinoffClave: z.string().min(1, "Selecciona la spin-off"),
-    rolJV: z.enum(ROLES_JV, { message: "Selecciona Cliente Final o Inversor" }),
-  }),
-]);
-
-export const leadSchema = leadUnion.superRefine((lead, ctx) => {
-  const disponibles = serviciosDisponibles(
-    lead.linea,
-    lead.linea === "jv_builder" ? lead.rolJV : undefined,
-  );
-
-  if (disponibles.length === 0) return;
-
-  if (!lead.servicio) {
+export const leadSchema = base.superRefine((lead, ctx) => {
+  if (requiereSpinoff(lead.ruta) && !lead.spinoffClave) {
     ctx.addIssue({
       code: "custom",
-      path: ["servicio"],
-      message: "Selecciona el servicio",
-    });
-    return;
-  }
-
-  if (!(disponibles as readonly string[]).includes(lead.servicio)) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["servicio"],
-      message: "Ese servicio no corresponde a esta clasificación",
+      path: ["spinoffClave"],
+      message: "Selecciona la spin-off",
     });
   }
 });
