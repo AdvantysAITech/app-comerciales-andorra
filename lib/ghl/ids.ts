@@ -1,7 +1,3 @@
-/**
- * Mapa de IDs internos de GHL. Generado desde `npm run ghl:discover`.
- * No editar a mano salvo que se vuelva a ejecutar el script.
- */
 import type { LineaNegocio, RolJV } from "@/lib/domain/tipos";
 
 export type PipelineRef = { id: string; primeraFase: string };
@@ -25,14 +21,12 @@ export const PIPELINES = {
   },
 } satisfies Record<string, PipelineRef>;
 
-/** RF-16: cada lead clasificado cae en un único pipeline, primera fase. */
 export function pipelineDestino(linea: LineaNegocio, rolJV?: RolJV): PipelineRef {
   if (linea === "consultoria") return PIPELINES.desarrollo_negocio;
   if (linea === "iso42001") return PIPELINES.iso42001;
   return rolJV === "inversor" ? PIPELINES.jv_inversor : PIPELINES.jv_cliente_final;
 }
 
-/** Campos personalizados de Contacto. */
 export const CAMPO_CONTACTO = {
   cargo: "0c8QVxcja2QAJ4idwzgc",
   web_empresa: "mynnj0n08kfN6mtRfOvZ",
@@ -44,25 +38,19 @@ export const CAMPO_CONTACTO = {
   herramientas: "lG6ROliWgf5k9inMkVUb",
 } as const;
 
-/** Campos personalizados de Oportunidad. */
 export const CAMPO_OPORTUNIDAD = {
   linea_negocio: "MRoqR8q4UT7L0YOMpotJ",
   rol_jv: "lfgwNeKAU142WF0dRK95",
-  tipologia_servicio: "NrGxhrkhex28tsxIgBUw",
   pain_declarado: "iZgonE2aX5eGn88UMIQp",
   procesos_criticos: "4C1X1xw1M0BacQDBtOFw",
   bant_score_total: "4JuRmJLSXZnQSioMqqRv",
+  servicio: "qJcyTNPShS2Hb78WLsdn",
+  modalidad: "oale1hRnvlB9wIb19PmM",
+  estado_presupuesto: "SAunyT1dHD1wtDJAEEM3",
+  uuid_app_comercial: "GjSIMg4hDstajhjctMWI",
+  tipologia_servicio: "NrGxhrkhex28tsxIgBUw",
 } as const;
 
-/**
- * Campos BANT de Oportunidad, indexados por criterio de `lib/domain/bant.ts`.
- * `respuesta` guarda la opción elegida; `puntos` el valor individual.
- *
- * OJO con `authority`: en GHL está declarado como CHECKBOX, no como
- * SINGLE_OPTIONS. La API v2 espera un ARRAY en los checkbox — mandarle la
- * cadena "Sí" no da error, simplemente deja el campo vacío. Lo resuelve
- * `campoCheckbox()` en contactos.ts; no uses `campo()` para este.
- */
 export const CAMPO_BANT = {
   budget_tiene: { respuesta: "mprVGYr4LSz5UF1rteIc", puntos: "9JxoK6zt63xmA8gJtd6K" },
   budget_rango: { respuesta: "8gqoxNJibDtbDEwP7viD", puntos: "9L9ltBcRo4PiUBCRY3uM" },
@@ -72,25 +60,17 @@ export const CAMPO_BANT = {
   timeline: { respuesta: "HPDaaWFJGv4eV8oK3C9s", puntos: "57dhTrYkvQP6IeLT29fN" },
 } as const;
 
-/** Campos de diagnóstico de Contacto (RF-02), para la fase de profundización. */
 export const CAMPO_DIAGNOSTICO = {
   experiencia_consultora: "1tYmx6xtWyNw4yWVdSfE",
   diagnostico_realizado: "LPTVk66cPrQ7mgHmT9yk",
 } as const;
 
-/** Objeto personalizado Spin-off. */
 export const OBJETO_SPINOFF = {
   key: "custom_objects.spin_offs",
   propNombre: "custom_objects.spin_offs.nombre_de_la_spin_off",
   propClave: "custom_objects.spin_offs.clave_interna",
 } as const;
 
-/**
- * Asociación Spin-off ↔ Oportunidad.
- * El orden NO es arbitrario: en GHL, firstObjectKey = custom_objects.spin_offs
- * y secondObjectKey = opportunity. Al crear la relación, firstRecordId debe ser
- * la spin-off y secondRecordId la oportunidad. Invertirlo da un error opaco.
- */
 export const ASOCIACION_SPINOFF_OPORTUNIDAD = {
   id: "6a7dc7507ce3df2087c4b6cc",
   key: "spinoff_vinculada",

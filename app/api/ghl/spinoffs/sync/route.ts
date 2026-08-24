@@ -13,8 +13,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const total = await sincronizarSpinoffs();
-    return NextResponse.json({ sincronizadas: total });
+    const resultado = await sincronizarSpinoffs();
+    return NextResponse.json(resultado);
   } catch (error) {
     const detalle = error instanceof Error ? error.message : "Error desconocido";
     return NextResponse.json({ error: detalle }, { status: 502 });

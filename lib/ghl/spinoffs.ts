@@ -22,7 +22,9 @@ function propiedad(p: Record<string, unknown>, corta: string, larga: string) {
 }
 
 /** Lectura directa desde GHL. Solo la usa la sincronización. */
-export async function leerSpinoffsDeGhl(): Promise<Spinoff[]> {
+export async function leerSpinoffsDeGhl(
+  opciones: { incluirSinClave?: boolean } = {},
+): Promise<Spinoff[]> {
   const data = await ghl<{ records?: RegistroGhl[] }>(
     `/objects/${OBJETO_SPINOFF.key}/records/search`,
     {
@@ -31,31 +33,43 @@ export async function leerSpinoffsDeGhl(): Promise<Spinoff[]> {
     },
   );
 
-  return (data.records ?? [])
-    .map((r) => {
-      const p = r.properties ?? {};
-      return {
-        clave: propiedad(p, "clave_interna", OBJETO_SPINOFF.propClave).trim().toLowerCase(),
-        ghlId: r.id,
-        nombre: propiedad(p, "nombre_de_la_spin_off", OBJETO_SPINOFF.propNombre),
-        estado: (p["estado_global"] as string) ?? undefined,
-      };
-    })
-    // Una spin-off sin clave interna no entra en la caché: sin ella no hay
-    // referencia estable y el lead quedaría atado a un id de GHL.
-    .filter((s) => s.clave && s.nombre);
+  const todas = (data.records ?? []).map((r) => {
+    const p = r.properties ?? {};
+    return {
+      clave: propiedad(p, "clave_interna", OBJETO_SPINOFF.propClave).trim().toLowerCase(),
+      ghlId: r.id,
+      nombre: propiedad(p, "nombre_de_la_spin_off", OBJETO_SPINOFF.propNombre),
+      estado: (p["estado_global"] as string) ?? undefined,
+    };
+  });
+
+  return opciones.incluirSinClave ? todas : todas.filter((s) => s.clave && s.nombre);
 }
 
 /** Refresca la caché. Devuelve cuántas ha sincronizado. */
-export async function sincronizarSpinoffs(): Promise<number> {
-  const spinoffs = await leerSpinoffsDeGhl();
-  if (spinoffs.length === 0) {
-    throw new Error("GHL no devolvió ninguna spin-off con clave interna");
+/** Refresca la caché. Devuelve el detalle de lo sincronizado y lo descartado. */
+export async function sincronizarSpinoffs(): Promise<{
+  sincronizadas: number;
+  descartadas: string[];
+}> {
+  const crudas = await leerSpinoffsDeGhl({ incluirSinClave: true });
+  const validas = crudas.filter((s) => s.clave && s.nombre);
+  const descartadas = crudas
+    .filter((s) => !s.clave && s.nombre)
+    .map((s) => s.nombre);
+
+  if (validas.length === 0) {
+    throw new Error(
+      descartadas.length
+        ? `Ninguna spin-off tiene clave interna. Sin clave: ${descartadas.join(", ")}. ` +
+          `Créala en GHL (Objects → Spin-off → campo "Clave interna") y rellénala.`
+        : "GHL no devolvió ninguna spin-off.",
+    );
   }
 
   const admin = createAdminClient();
   const { error } = await admin.from("spinoffs_cache").upsert(
-    spinoffs.map((s) => ({
+    validas.map((s) => ({
       clave_interna: s.clave,
       ghl_id: s.ghlId,
       nombre: s.nombre,
@@ -66,5 +80,5 @@ export async function sincronizarSpinoffs(): Promise<number> {
   );
 
   if (error) throw new Error(`No se pudo escribir la caché: ${error.message}`);
-  return spinoffs.length;
+  return { sincronizadas: validas.length, descartadas };
 }

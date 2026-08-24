@@ -6,6 +6,7 @@ import {
   ETIQUETA_SECTOR,
   ETIQUETA_EMPLEADOS,
   ETIQUETA_FACTURACION,
+  ETIQUETA_PROCESO
 } from "@/lib/domain/lead";
 import { ETIQUETA_LINEA, ETIQUETA_ROL } from "@/lib/domain/tipos";
 import { CLASIFICACION, PREGUNTAS_BANT, calcularBant } from "@/lib/domain/bant";
@@ -39,9 +40,6 @@ export async function POST(request: Request) {
   /* Resolución de la spin-off                                         */
   /* ---------------------------------------------------------------- */
 
-  // El cliente solo manda la clave interna (`educacion`, `agro`…). El id de
-  // GHL y el nombre visible salen de la caché, nunca del navegador: así no
-  // puede llegar un nombre que no cuadre con la spin-off, ni un id inventado.
   let spinoffGhlId: string | null = null;
   let spinoffNombre: string | null = null;
 
@@ -82,6 +80,8 @@ export async function POST(request: Request) {
     spinoff_clave: esJV ? lead.spinoffClave : null,
     spinoff_id: spinoffGhlId,
     spinoff_nombre: spinoffNombre,
+    servicio: lead.servicio ?? null,
+    modalidad: lead.modalidad ?? null,
   };
 
   /* ---------------------------------------------------------------- */
@@ -180,6 +180,10 @@ export async function POST(request: Request) {
         valorEstimado: lead.valorEstimado,
         pain: lead.pain,
         bant: lead.bant,
+        servicio: lead.servicio,
+        modalidad: lead.modalidad,
+        procesos: lead.procesos.map((p) => ETIQUETA_PROCESO[p]),
+        uuid: lead.uuid,
       },
       contacto.id,
     );

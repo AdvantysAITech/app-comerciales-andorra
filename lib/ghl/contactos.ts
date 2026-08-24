@@ -12,27 +12,20 @@ export type ContactoGhl = {
   companyName?: string;
 };
 
-/** Solo añade el campo si tenemos id y valor. Evita mandar basura a GHL. */
 export const campo = (id: string, valor: string | number | undefined | null) =>
   id && valor !== undefined && valor !== null && valor !== "" ? [{ id, field_value: valor }] : [];
 
-/**
- * Variante para campos declarados como CHECKBOX en GHL, que esperan un ARRAY
- * aunque solo admitan una opción. Mandarles la cadena suelta no da error: deja
- * el campo vacío en silencio. Lo sufre "BANT - Authority (¿es el decisor?)".
- */
 export const campoCheckbox = (id: string, valor: string | undefined | null) =>
   id && valor ? [{ id, field_value: [valor] }] : [];
+
+export const campoMulti = (id: string, valores: readonly string[] | undefined) =>
+  id && valores && valores.length ? [{ id, field_value: [...valores] }] : [];
 
 function partirNombre(nombre: string) {
   const partes = nombre.trim().split(/\s+/);
   return { firstName: partes[0], lastName: partes.slice(1).join(" ") || undefined };
 }
 
-/**
- * Busca un contacto por email o teléfono para avisar al comercial de que ya existe.
- * Es informativo: quien decide de verdad si crea o actualiza es el upsert.
- */
 export async function buscarContacto(params: {
   email?: string;
   telefono?: string;
@@ -67,12 +60,6 @@ export type DatosContacto = {
   herramientas?: string;
 };
 
-/**
- * Alta o actualización. GHL resuelve el duplicado según la configuración
- * "Allow Duplicate Contact" de la sub-cuenta.
- * Decisión de producto: lo nuevo sobrescribe lo viejo — el comercial acaba de
- * hablar con la persona, su información es la más fresca.
- */
 export async function upsertContacto(
   d: DatosContacto,
 ): Promise<{ id: string; nuevo: boolean }> {

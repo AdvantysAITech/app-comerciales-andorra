@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -14,6 +14,15 @@ import {
   ETIQUETA_SECTOR,
   ETIQUETA_EMPLEADOS,
   ETIQUETA_FACTURACION,
+  PROCESOS,
+  ETIQUETA_PROCESO,
+  MODALIDADES,
+  ETIQUETA_SERVICIO,
+  ETIQUETA_MODALIDAD,
+  serviciosDisponibles,
+  type Proceso,
+  type Servicio,
+  type Modalidad,
   type Fuente,
   type Idioma,
   type Sector,
@@ -81,6 +90,28 @@ export default function FormularioLead({
   const [mostrarAsistente, setMostrarAsistente] = useState(false);
   const [sugerido, setSugerido] = useState(false);
   const [uuid, setUuid] = useState(() => crypto.randomUUID());
+  const [servicio, setServicio] = useState<Servicio | "">("");
+  const [modalidad, setModalidad] = useState<Modalidad | "">("");
+  const [procesos, setProcesos] = useState<Proceso[]>([]);
+
+  const serviciosPosibles = useMemo(
+    () => (linea ? serviciosDisponibles(linea, rolJV ?? undefined) : []),
+    [linea, rolJV],
+  );
+  useEffect(() => {
+    if (serviciosPosibles.length === 1) {
+      setServicio(serviciosPosibles[0]);
+      return;
+    }
+    if (serviciosPosibles.length === 0) {
+      setServicio("");
+      setModalidad("");
+      return;
+    }
+    if (servicio && !(serviciosPosibles as readonly string[]).includes(servicio)) {
+      setServicio("");
+    }
+  }, [serviciosPosibles, servicio]);
 
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
@@ -139,6 +170,9 @@ export default function FormularioLead({
       notas: campos.notas || undefined,
       herramientas: campos.herramientas || undefined,
       valorEstimado: campos.valorEstimado ? Number(campos.valorEstimado) : undefined,
+      servicio: servicio || undefined,
+      modalidad: modalidad || undefined,
+      procesos,
       bant,
       linea,
       ...(esJV ? { spinoffClave, rolJV: rolJV ?? undefined } : {}),
@@ -178,6 +212,9 @@ export default function FormularioLead({
     setExito(null);
     setAviso(null);
     setSugerido(false);
+    setServicio("");
+    setModalidad("");
+    setProcesos([]);
   }
 
   const resultado = calcularBant(bant);
@@ -320,6 +357,55 @@ export default function FormularioLead({
             </div>
           </div>
         )}
+        {linea && (linea !== "jv_builder" || rolJV) && serviciosPosibles.length > 0 && (
+          <div className="mt-6 grid gap-4 border-t border-line pt-6 sm:grid-cols-2">
+            <div>
+              <label className="etiqueta" htmlFor="servicio">Servicio</label>
+              <select
+                id="servicio"
+                className="campo"
+                value={servicio}
+                disabled={serviciosPosibles.length === 1}
+                aria-invalid={errores.servicio ? "true" : undefined}
+                onChange={(e) => {
+                  setServicio(e.target.value as Servicio | "");
+                  setErrores((x) => ({ ...x, servicio: "" }));
+                }}
+              >
+                <option value="">Selecciona el servicio…</option>
+                {serviciosPosibles.map((s) => (
+                  <option key={s} value={s}>{ETIQUETA_SERVICIO[s]}</option>
+                ))}
+              </select>
+              {serviciosPosibles.length === 1 && (
+                <p className="traza mt-1.5 normal-case">
+                  Único servicio posible en esta línea.
+                </p>
+              )}
+              {errores.servicio && <p className="error">{errores.servicio}</p>}
+            </div>
+
+            <div>
+              <label className="etiqueta" htmlFor="modalidad">
+                Modalidad (opcional)
+              </label>
+              <select
+                id="modalidad"
+                className="campo"
+                value={modalidad}
+                onChange={(e) => setModalidad(e.target.value as Modalidad | "")}
+              >
+                <option value="">Sin definir todavía</option>
+                {MODALIDADES.map((m) => (
+                  <option key={m} value={m}>{ETIQUETA_MODALIDAD[m]}</option>
+                ))}
+              </select>
+              <p className="traza mt-1.5 normal-case">
+                Cómo se cobra. Si aún no está hablado, déjalo sin definir.
+              </p>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Cualificación BANT */}
@@ -397,6 +483,28 @@ export default function FormularioLead({
         <div className="space-y-4">
           <Campo etiqueta="Valor estimado del contrato (€, opcional)" tipo="number"
             valor={campos.valorEstimado} onChange={set("valorEstimado")} error={errores.valorEstimado} />
+          <div>
+            <label className="etiqueta">Procesos críticos a automatizar (opcional)</label>
+            <div className="flex flex-wrap gap-2">
+              {PROCESOS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className="boton-fantasma"
+                  data-activo={procesos.includes(p)}
+                  onClick={() =>
+                    setProcesos((actual) =>
+                      actual.includes(p)
+                        ? actual.filter((x) => x !== p)
+                        : [...actual, p],
+                    )
+                  }
+                >
+                  {ETIQUETA_PROCESO[p]}
+                </button>
+              ))}
+            </div>
+          </div>
           <Area etiqueta="Principal dolor declarado (opcional)" valor={campos.pain} onChange={set("pain")} />
           <Area etiqueta="Notas internas (opcional)" valor={campos.notas} onChange={set("notas")} />
         </div>

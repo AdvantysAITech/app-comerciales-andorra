@@ -13,18 +13,27 @@ export type FilaLead = {
   comercialEmail: string | null;
   clasificacion: string;
   contactoExistia: boolean;
-  resultado: "creado" | "bloqueado_wf16" | "error";
+  resultado: "en_curso" | "creado" | "bloqueado_wf16" | "error";
   detalle: string | null;
   bantTexto: string | null;
   enlaceContacto: string | null;
   enlaceOportunidad: string | null;
 };
 
-const ESTADO: Record<FilaLead["resultado"], { etiqueta: string; bloqueo: boolean }> = {
+type Estado = { etiqueta: string; bloqueo: boolean };
+
+const ESTADO: Record<FilaLead["resultado"], Estado> = {
+  en_curso: { etiqueta: "Sin confirmar", bloqueo: true },
   creado: { etiqueta: "Registrado", bloqueo: false },
   bloqueado_wf16: { etiqueta: "Bloqueado", bloqueo: true },
   error: { etiqueta: "No guardado", bloqueo: true },
 };
+
+function estadoDe(resultado: string): Estado {
+  return (
+    ESTADO[resultado as FilaLead["resultado"]] ?? { etiqueta: resultado, bloqueo: true }
+  );
+}
 
 export default function ListaLeads({ leads }: { leads: FilaLead[] }) {
   const [abierto, setAbierto] = useState<FilaLead | null>(null);
@@ -64,8 +73,10 @@ export default function ListaLeads({ leads }: { leads: FilaLead[] }) {
                 </span>
               </span>
               <span className="shrink-0 text-right">
-                {ESTADO[lead.resultado].bloqueo && (
-                  <span className="traza block text-block">{ESTADO[lead.resultado].etiqueta}</span>
+                {estadoDe(lead.resultado).bloqueo && (
+                  <span className="traza block text-block">
+                    {estadoDe(lead.resultado).etiqueta}
+                  </span>
                 )}
                 <span className="traza block">{lead.fechaCorta}</span>
               </span>
@@ -80,7 +91,7 @@ export default function ListaLeads({ leads }: { leads: FilaLead[] }) {
 }
 
 function Ficha({ lead, cerrar }: { lead: FilaLead; cerrar: () => void }) {
-  const estado = ESTADO[lead.resultado];
+    const estado = estadoDe(lead.resultado);
 
   return (
     <div

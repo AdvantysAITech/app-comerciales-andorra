@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "ghl:discover": "node --env-file=.env.local scripts/ghl-discover.mjs",
-    "ghl:smoke": "node --env-file=.env.local scripts/ghl-smoke.mjs"
+    "ghl:smoke": "node --env-file=.env.local scripts/ghl-smoke.mjs",
+    "ghl:spinoffs": "node --env-file=.env.local scripts/ghl-spinoffs.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

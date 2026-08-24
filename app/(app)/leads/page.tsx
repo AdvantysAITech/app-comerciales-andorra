@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
+import { sesionActual, puedeVer } from "@/lib/permisos";
 import { enlaceContacto, enlaceOportunidad } from "@/lib/ghl/enlaces";
 import { CLASIFICACION, type Clasificacion } from "@/lib/domain/bant";
 import { ETIQUETA_LINEA, ETIQUETA_ROL, type LineaNegocio, type RolJV } from "@/lib/domain/tipos";
@@ -15,7 +17,7 @@ type Fila = {
   rol_jv: RolJV | null;
   spinoff_nombre: string | null;
   contacto_existia: boolean;
-  resultado: "creado" | "bloqueado_wf16" | "error";
+  resultado: "en_curso" | "creado" | "bloqueado_wf16" | "error";
   detalle: string | null;
   bant_score: number | null;
   bant_clasificacion: Clasificacion | null;
@@ -29,12 +31,31 @@ type Fila = {
 const ZONA = "Europe/Andorra";
 
 export default async function MisLeads() {
+  const sesion = await sesionActual();
+  if (!sesion || !puedeVer(sesion, "captacion")) notFound();
+
+  const alcance = sesion.alcances.captacion;
+  const soloMios = alcance === "propio";
+
   const supabase = await supabaseServer();
-  const { data } = await supabase
+
+  // El alcance `propio` de lib/permisos.ts estaba modelado desde el principio
+  // pero no se aplicaba: la consulta era un select("*") pelado bajo el título
+  // "Mis leads", y Antonio José y Samuel se veían los leads el uno del otro.
+  //
+  // Este filtro es la mitad del arreglo. La otra mitad es la RLS de
+  // 2026-08-24-rls-leads.sql: filtrar solo aquí protege la PANTALLA, no los
+  // DATOS — cualquiera con el token de sesión puede consultar la tabla por su
+  // cuenta. Las dos capas, no una.
+  let consulta = supabase
     .from("leads")
     .select("*")
     .order("creado_en", { ascending: false })
     .limit(50);
+
+  if (soloMios) consulta = consulta.eq("comercial_id", sesion.usuario.id);
+
+  const { data } = await consulta;
 
   const filas: FilaLead[] = ((data ?? []) as Fila[]).map((lead) => {
     const fecha = new Date(lead.creado_en);
@@ -77,12 +98,20 @@ export default async function MisLeads() {
 
   return (
     <div>
-      <p className="traza">Altas hechas desde esta app</p>
-      <h1 className="mt-2 mb-8 text-2xl font-semibold tracking-tight">Mis leads</h1>
+      <p className="traza">
+        {soloMios ? "Altas hechas desde esta app" : `Altas de todo el equipo · alcance ${alcance}`}
+      </p>
+      <h1 className="mt-2 mb-8 text-2xl font-semibold tracking-tight">
+        {soloMios ? "Mis leads" : "Leads del equipo"}
+      </h1>
 
       {filas.length === 0 ? (
         <div className="border border-dashed border-line p-10 text-center">
-          <p className="text-tinta-media">Todavía no has dado de alta ningún lead.</p>
+          <p className="text-tinta-media">
+            {soloMios
+              ? "Todavía no has dado de alta ningún lead."
+              : "Todavía no hay ningún lead dado de alta."}
+          </p>
           <Link href="/leads/nuevo" className="boton mt-5 inline-block">
             Dar de alta el primero
           </Link>

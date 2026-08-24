@@ -1,6 +1,6 @@
 import "server-only";
 import { ghl, locationId } from "./client";
-import { campo, campoCheckbox } from "./contactos";
+import { campo, campoCheckbox, campoMulti } from "./contactos";
 import {
   ASOCIACION_SPINOFF_OPORTUNIDAD,
   CAMPO_BANT,
@@ -15,6 +15,15 @@ import {
   type CriterioBant,
   type RespuestasBant,
 } from "@/lib/domain/bant";
+import {
+  ETIQUETA_SERVICIO,
+  ETIQUETA_MODALIDAD,
+  ETIQUETA_ESTADO_PRESUPUESTO,
+  ESTADO_PRESUPUESTO_INICIAL,
+  type Servicio,
+  type Modalidad,
+} from "@/lib/domain/servicio";
+
 
 export type DatosOportunidad = {
   empresa: string;
@@ -25,6 +34,10 @@ export type DatosOportunidad = {
   valorEstimado?: number;
   pain?: string;
   bant?: RespuestasBant;
+  servicio?: Servicio;
+  modalidad?: Modalidad;
+  procesos?: readonly string[];
+  uuid: string;
 };
 
 /**
@@ -84,6 +97,20 @@ export async function crearOportunidad(d: DatosOportunidad, contactoId: string) 
         ...campo(CAMPO_OPORTUNIDAD.linea_negocio, ETIQUETA_LINEA[d.linea]),
         ...campo(CAMPO_OPORTUNIDAD.rol_jv, d.rolJV ? ETIQUETA_ROL[d.rolJV] : undefined),
         ...campo(CAMPO_OPORTUNIDAD.pain_declarado, d.pain),
+        ...campoMulti(CAMPO_OPORTUNIDAD.procesos_criticos, d.procesos),
+        ...campo(
+          CAMPO_OPORTUNIDAD.servicio,
+          d.servicio ? ETIQUETA_SERVICIO[d.servicio] : undefined,
+        ),
+        ...campo(
+          CAMPO_OPORTUNIDAD.modalidad,
+          d.modalidad ? ETIQUETA_MODALIDAD[d.modalidad] : undefined,
+        ),
+        ...campo(
+          CAMPO_OPORTUNIDAD.estado_presupuesto,
+          ETIQUETA_ESTADO_PRESUPUESTO[ESTADO_PRESUPUESTO_INICIAL],
+        ),
+        ...campo(CAMPO_OPORTUNIDAD.uuid_app_comercial, d.uuid),
         ...bant.campos,
       ],
     },

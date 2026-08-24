@@ -1,10 +1,7 @@
-/**
- * Validación y asistente de clasificación. DERCAS v3.4 — RF-16, CA-07a, CA-07b.
- * TypeScript puro: ni Next ni GHL. Toda la lógica de detección vive aquí.
- */
 import { z } from "zod";
 import { LINEAS, ROLES_JV, type LineaNegocio, type RolJV } from "./tipos";
 import { PREGUNTAS_BANT, type CriterioBant } from "./bant";
+import { SERVICIOS, MODALIDADES, serviciosDisponibles, type Servicio } from "./servicio";
 
 export const FUENTES = [
   "linkedin",
@@ -20,7 +17,6 @@ export type Fuente = (typeof FUENTES)[number];
 export const IDIOMAS = ["es", "ca", "en"] as const;
 export type Idioma = (typeof IDIOMAS)[number];
 
-/** Texto EXACTO de las opciones en GHL. Si cambias una opción allí, cámbiala aquí. */
 export const ETIQUETA_FUENTE: Record<Fuente, string> = {
   linkedin: "LinkedIn",
   referido: "Referido",
@@ -36,10 +32,6 @@ export const ETIQUETA_IDIOMA: Record<Idioma, string> = {
   ca: "Català",
   en: "English",
 };
-
-/* ------------------------------------------------------------------ */
-/* Catálogos de empresa (sección 4.1)                                  */
-/* ------------------------------------------------------------------ */
 
 export const SECTORES = [
   "educacion",
@@ -91,6 +83,25 @@ export const ETIQUETA_FACTURACION: Record<Facturacion, string> = {
   mas_50m: "Más de 50M",
 };
 
+export const PROCESOS = [
+  "ventas",
+  "marketing",
+  "rrhh",
+  "finanzas",
+  "operaciones",
+  "otro",
+] as const;
+export type Proceso = (typeof PROCESOS)[number];
+
+export const ETIQUETA_PROCESO: Record<Proceso, string> = {
+  ventas: "Ventas",
+  marketing: "Marketing",
+  rrhh: "RRHH",
+  finanzas: "Finanzas",
+  operaciones: "Operaciones",
+  otro: "Otro",
+};
+
 /* ------------------------------------------------------------------ */
 /* Esquema de alta                                                     */
 /* ------------------------------------------------------------------ */
@@ -133,22 +144,46 @@ const base = z.object({
   empleados: z.enum(EMPLEADOS),
   facturacion: z.enum(FACTURACION),
   herramientas: z.string().trim().optional(),
+  servicio: z.enum(SERVICIOS).optional(),
+  modalidad: z.enum(MODALIDADES).optional(),
+  procesos: z.array(z.enum(PROCESOS)).default([]),
 });
 
-/**
- * RF-16: la App Comercial nunca deja un lead sin clasificar.
- * En JV Builder, Spin-off y Rol son obligatorios (CA-07b). El discriminatedUnion
- * hace que sea imposible construir un lead válido sin ellos.
- */
-export const leadSchema = z.discriminatedUnion("linea", [
+const leadUnion = z.discriminatedUnion("linea", [
   base.extend({ linea: z.literal("consultoria") }),
   base.extend({ linea: z.literal("iso42001") }),
   base.extend({
     linea: z.literal("jv_builder"),
     spinoffClave: z.string().min(1, "Selecciona la spin-off"),
     rolJV: z.enum(ROLES_JV, { message: "Selecciona Cliente Final o Inversor" }),
-  })
+  }),
 ]);
+
+export const leadSchema = leadUnion.superRefine((lead, ctx) => {
+  const disponibles = serviciosDisponibles(
+    lead.linea,
+    lead.linea === "jv_builder" ? lead.rolJV : undefined,
+  );
+
+  if (disponibles.length === 0) return;
+
+  if (!lead.servicio) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["servicio"],
+      message: "Selecciona el servicio",
+    });
+    return;
+  }
+
+  if (!(disponibles as readonly string[]).includes(lead.servicio)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["servicio"],
+      message: "Ese servicio no corresponde a esta clasificación",
+    });
+  }
+});
 
 export type LeadInput = z.infer<typeof leadSchema>;
 
@@ -264,3 +299,6 @@ export const PREGUNTAS_ASISTENTE = [
 
 export { LINEAS, ROLES_JV };
 export type { LineaNegocio, RolJV };
+export { SERVICIOS, MODALIDADES, serviciosDisponibles, servicioUnico } from "./servicio";
+export { ETIQUETA_SERVICIO, ETIQUETA_MODALIDAD } from "./servicio";
+export type { Servicio, Modalidad } from "./servicio";
