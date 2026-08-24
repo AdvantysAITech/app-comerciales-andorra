@@ -27,7 +27,7 @@ export async function POST(
 
   const supabase = await supabaseServer();
 
-  const { data: lead } = await supabase
+  const { data: lead, error: errorLead } = await supabase
     .from("leads")
     .select("id, comercial_id, empresa, sector, empleados, facturacion, ciudad_pais, ruta, checklist, bant_score, spinoff_clave, spinoff_nombre, resultado")
     .eq("id", id)
@@ -51,6 +51,16 @@ export async function POST(
     .eq("lead_id", id)
     .maybeSingle();
 
+  if (errorLead) {
+    console.error("[documento] select de lead falló", errorLead);
+    return NextResponse.json(
+      { error: `No se pudo leer el lead: ${JSON.stringify(errorLead)}` },
+      { status: 500 },
+    );
+  }
+
+  if (!lead) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
+  
   if (existente) return NextResponse.json({ documentoId: existente.id, repetido: true });
 
   const ruta = lead.ruta as Ruta;

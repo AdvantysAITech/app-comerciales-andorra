@@ -124,6 +124,10 @@ export async function POST(request: Request) {
     estado_presupuesto: calculo.estado,
     motivos_revision: calculo.motivos,
     procesos: lead.procesos,
+    sector: lead.sector,
+    empleados: lead.empleados,
+    facturacion: lead.facturacion,
+    ciudad_pais: lead.ciudadPais,
   };
 
   /* ---------------------------------------------------------------- */

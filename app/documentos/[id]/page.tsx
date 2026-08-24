@@ -72,25 +72,6 @@ export default async function VerDocumento({
 
   if (!lead) notFound();
 
-  /**
-   * 7.6: el documento de cliente no se puede ver hasta que Jacob valida.
-   *
-   * Esta comprobación protege la PANTALLA. La que protege el fichero está en
-   * el route handler del PDF, y es la que de verdad cuenta: una URL de
-   * descarga es lo que alguien reenvía por email sin pensarlo.
-   */
-  if (!doc.validado_en) {
-    return (
-      <div className="mx-auto max-w-md p-10 text-center">
-        <p className="traza">Pendiente de validación</p>
-        <p className="mt-3 text-sm text-tinta-media">
-          Este documento todavía no está validado. Jacob tiene que revisarlo antes
-          de que pueda entregarse al cliente.
-        </p>
-      </div>
-    );
-  }
-
   const documento = construirDocumentoCliente({
     alcance: doc.alcance as Alcance,
     ruta: lead.ruta as Ruta,
@@ -99,12 +80,44 @@ export default async function VerDocumento({
     precio: lead.precio_presentado,
   });
 
+  /**
+   * 7.6 distingue VER de ENTREGAR.
+   *
+   * El comercial ve siempre su propuesta en pantalla: la genera él, y sin
+   * poder leerla trabaja a ciegas hasta que alguien la valide. Lo que queda
+   * bloqueado hasta la validación es la DESCARGA, porque el PDF es lo que se
+   * reenvía por email y lo que acaba en manos del cliente.
+   *
+   * Este bloque solo decide qué se pinta. El control que de verdad cuenta está
+   * en el route handler del PDF, que devuelve 403 mientras `validado_en` sea
+   * null: una URL de descarga se comparte sin pensarlo, una pantalla no.
+   *
+   * Esta vista es siempre la del cliente — sin horas, sin suelo de negociación
+   * y sin desviación. Eso vive en /documentos/[id]/interno, con alcance total.
+   */
+  const validado = Boolean(doc.validado_en);
+
   return (
     <>
-      <div className="no-imprimir mx-auto flex max-w-[19cm] items-center justify-between px-6 py-4">
+      <div className="no-imprimir mx-auto flex max-w-[19cm] flex-wrap items-center justify-between gap-3 px-6 py-4">
         <p className="traza">{documento.referencia}</p>
-        <BotonDescargar id={id} />
+        {validado ? (
+          <BotonDescargar id={id} />
+        ) : (
+          <p className="traza normal-case text-tinta-media">
+            Pendiente de validación · todavía no se puede descargar
+          </p>
+        )}
       </div>
+
+      {!validado && (
+        <div className="no-imprimir mx-auto max-w-[19cm] px-6 pb-4">
+          <p className="border-l-2 border-block bg-elevado px-4 py-3 text-sm">
+            Así queda la propuesta. Jacob tiene que revisarla antes de que pueda
+            entregarse al cliente: hasta entonces el PDF no está disponible.
+          </p>
+        </div>
+      )}
 
       <Plantilla doc={documento} />
     </>
