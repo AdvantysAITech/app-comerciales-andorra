@@ -141,13 +141,13 @@ const base = z.object({
  * hace que sea imposible construir un lead válido sin ellos.
  */
 export const leadSchema = z.discriminatedUnion("linea", [
+  base.extend({ linea: z.literal("consultoria") }),
   base.extend({ linea: z.literal("iso42001") }),
   base.extend({
     linea: z.literal("jv_builder"),
     spinoffClave: z.string().min(1, "Selecciona la spin-off"),
     rolJV: z.enum(ROLES_JV, { message: "Selecciona Cliente Final o Inversor" }),
-  }),
-  base.extend({ linea: z.literal("iso42001") }),
+  })
 ]);
 
 export type LeadInput = z.infer<typeof leadSchema>;
