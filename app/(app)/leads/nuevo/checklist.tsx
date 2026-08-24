@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import GrabadorAudio from "@/components/audio/grabador";
 import {
   preguntasVisibles,
   SPINOFF,
@@ -317,26 +318,40 @@ function Control({
 
     /* -------------------------------------------------------------- */
 
-    case "audio":
+    case "audio": {
+      const escrito = typeof valor === "string" ? valor : "";
+
+      // Lo transcrito se AÑADE al final, separado por una línea en blanco.
+      // Sustituir el contenido borraría lo que el comercial acabara de
+      // corregir a mano, y grabar dos veces seguidas es lo normal.
+      const anexar = (texto: string) => {
+        const previo = escrito.trimEnd();
+        onCambio(previo ? `${previo}\n\n${texto}` : texto);
+      };
+
       return (
         <div>
           <textarea
             id={id}
             className="campo"
             rows={5}
-            value={typeof valor === "string" ? valor : ""}
+            value={escrito}
             aria-invalid={invalido}
             onChange={(e) => onCambio(e.target.value || undefined)}
           />
-          {/* El botón de grabar se añade en 3.7. El teclado no desaparece
-              entonces: el documento exige que todo campo de audio admita
-              escritura directa, para no bloquear al comercial en un sitio
-              con ruido o sin permiso de micrófono. */}
+
+          {/* El teclado no desaparece por tener micrófono: el documento exige
+              que todo campo de audio admita escritura directa, para no
+              bloquear al comercial en un sitio con ruido o sin permiso. */}
+          <GrabadorAudio onTexto={anexar} />
+
           <p className="traza mt-1.5 normal-case">
-            Cuéntalo con detalle: esto es lo que alimenta el documento.
+            Cuéntalo con detalle: esto es lo que alimenta el documento. Puedes
+            grabar varias veces y corregir el texto a mano.
           </p>
         </div>
       );
+    }
   }
 }
 

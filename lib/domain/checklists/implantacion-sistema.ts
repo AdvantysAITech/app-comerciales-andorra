@@ -247,7 +247,7 @@ export const CHECKLIST_RUTA_3: Checklist = {
       // contexto). Es el campo que más alimenta la estimación de horas de la
       // IA, así que conviene que salga largo: de ahí el enunciado.
       id: "R3.9g",
-      tipo: "texto_largo",
+      tipo: "audio",
       enunciado: "¿Qué debe hacer exactamente la aplicación?",
       ayuda:
         "Descríbelo paso a paso, como si se lo explicaras a quien va a " +
