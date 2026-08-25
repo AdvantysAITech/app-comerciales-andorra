@@ -48,14 +48,12 @@ export default function ArbolClasificacion({
                 <button
                   key={o.valor}
                   type="button"
-                  className="boton-fantasma text-left"
+                  className="opcion"
                   data-activo={respuestas[nodoId] === o.valor}
                   onClick={() => responder(nodoId, o.valor)}
                 >
-                  <span className="block">{o.etiqueta}</span>
-                  {o.ayuda && (
-                    <span className="traza block normal-case opacity-70">{o.ayuda}</span>
-                  )}
+                  <span>{o.etiqueta}</span>
+                  {o.ayuda && <span className="ayuda">{o.ayuda}</span>}
                 </button>
               ))}
             </div>
