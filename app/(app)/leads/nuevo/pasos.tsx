@@ -10,19 +10,17 @@ export const PASOS: { id: Paso; titulo: string }[] = [
   { id: "revision", titulo: "Revisión" },
 ];
 
-/**
- * Barra de progreso. Se puede volver atrás pulsando un paso ya superado, pero
- * no saltar hacia delante: cada paso valida antes de dejar avanzar, y permitir
- * el salto dejaría al comercial en un checklist cuya ruta todavía no existe.
- */
 export function BarraPasos({
   actual,
   alcanzado,
+  conError,
   onIr,
 }: {
   actual: Paso;
   /** Índice del paso más avanzado que se ha llegado a validar. */
   alcanzado: number;
+  /** Pasos que tienen algún campo sin responder ahora mismo. */
+  conError: Paso[];
   onIr: (p: Paso) => void;
 }) {
   const indiceActual = PASOS.findIndex((p) => p.id === actual);
@@ -39,6 +37,7 @@ export function BarraPasos({
               onClick={() => navegable && onIr(p.id)}
               className="traza disabled:opacity-40"
               data-activo={i === indiceActual}
+              data-error={conError.includes(p.id) || undefined}
               aria-current={i === indiceActual ? "step" : undefined}
             >
               {i + 1}. {p.titulo}

@@ -16,6 +16,7 @@ import {
   ETIQUETA_EMPLEADOS,
   ETIQUETA_FACTURACION,
   ETIQUETA_PROCESO,
+  contactoSchema,
   type Proceso,
   type Fuente,
   type Idioma,
@@ -84,18 +85,20 @@ const VACIO: Campos = {
   herramientas: "", valorEstimado: "", notas: "",
 };
 
-/** Campos obligatorios de la sección 4.1, con su mensaje. */
-const OBLIGATORIOS: [keyof Campos, string][] = [
-  ["nombre", "Escribe nombre y apellidos"],
-  ["email", "Falta el email"],
-  ["telefono", "Falta el teléfono"],
-  ["empresa", "Falta la razón social"],
-  ["ciudadPais", "Indica ciudad y país"],
-  ["fuente", "Indica de dónde viene el lead"],
-  ["sector", "Selecciona el sector"],
-  ["empleados", "Selecciona el número de empleados"],
-  ["facturacion", "Selecciona la facturación"],
-];
+const CAMPOS_PASO: Record<string, Paso> = {
+  nombre: "contacto", email: "contacto", telefono: "contacto",
+  empresa: "contacto", cargo: "contacto", ciudadPais: "contacto",
+  web: "contacto", fuente: "contacto", idioma: "contacto",
+  sector: "contacto", empleados: "contacto", facturacion: "contacto",
+  herramientas: "contacto",
+  ruta: "clasificacion", spinoffClave: "clasificacion", faseId: "clasificacion",
+  bant: "bant",
+  uuid: "revision", valorEstimado: "revision", notas: "revision", procesos: "revision",
+};
+
+function pasoDelCampo(clave: string): Paso {
+  return CAMPOS_PASO[clave] ?? "checklist";
+}
 
 type Exito = {
   contactoId: string;
@@ -141,6 +144,11 @@ export default function FormularioLead({
   const definicion = ruta ? DEFINICION_RUTA[ruta] : null;
   const fases = ruta ? fasesPorRuta[ruta] : [];
 
+  const pasosConError = useMemo(
+    () => [...new Set(Object.keys(errores).map(pasoDelCampo))],
+    [errores],
+  );
+
   const set = (clave: keyof Campos) => (valor: string) => {
     setCampos((c) => ({ ...c, [clave]: valor }));
     setErrores((e) => {
@@ -154,8 +162,21 @@ export default function FormularioLead({
 
   function fijarRuta(nueva: Ruta | null, respuestasArbol: RespuestasArbol) {
     setArbol(respuestasArbol);
-    setRuta(nueva);
     setErrores({});
+
+    // Cambiar de ruta cambia el checklist entero. Conservar las respuestas
+    // anteriores dejaba las de la ruta vieja puestas y las obligatorias de la
+    // nueva sin responder, y el bloqueo no saltaba hasta el POST. Se compara
+    // con la ruta actual para no borrar nada cuando se repulsa la misma
+    // opcion del arbol.
+    if (nueva !== ruta) {
+      setChecklist({});
+      // Y se retrocede el progreso: con el checklist vacio, Revision ya no es
+      // un paso alcanzado.
+      setAlcanzado((a) => Math.min(a, PASOS.findIndex((p) => p.id === "clasificacion")));
+    }
+
+    setRuta(nueva);
     // La fase por defecto es la primera del pipeline destino, que cambia con
     // la ruta. Se resetea siempre: mantener una fase de otro pipeline sería
     // mandar a GHL un id que allí no existe.
@@ -167,12 +188,20 @@ export default function FormularioLead({
 
   function validarPaso(p: Paso): Record<string, string> {
     if (p === "contacto") {
+      // Mismo esquema que usa el POST: si divergen, el fallo aparece en
+      // Revision y apunta a un campo que alli no esta en pantalla.
+      const r = contactoSchema.safeParse({
+        ...campos,
+        web: campos.web || undefined,
+        cargo: campos.cargo || undefined,
+        herramientas: campos.herramientas || undefined,
+      });
+      if (r.success) return {};
+
       const e: Record<string, string> = {};
-      for (const [clave, mensaje] of OBLIGATORIOS) {
-        if (!campos[clave].trim()) e[clave] = mensaje;
-      }
-      if (campos.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(campos.email)) {
-        e.email = "Revisa el email";
+      for (const issue of r.error.issues) {
+        const clave = String(issue.path[0]);
+        if (!e[clave]) e[clave] = issue.message;
       }
       return e;
     }
@@ -189,7 +218,8 @@ export default function FormularioLead({
     // conversación y lo que falte se completa en el diagnóstico.
     if (p === "bant") return {};
 
-    if (p === "checklist" && ruta) {
+    if (p === "checklist") {
+      if (!ruta) return { ruta: "Vuelve a Clasificación: falta la ruta" };
       const conContexto = spinoffClave
         ? { ...checklist, [SPINOFF]: spinoffClave }
         : checklist;
@@ -199,12 +229,17 @@ export default function FormularioLead({
     return {};
   }
 
-  function avanzar() {
-    const fallos = validarPaso(paso);
+  /**
+   * Valida `desde` y devuelve el paso siguiente, o null si no se puede pasar.
+   * Se extrae de `avanzar` porque la barra de pasos necesita exactamente la
+   * misma comprobación cuando se navega hacia delante.
+   */
+  function intentarAvanzar(desde: Paso): Paso | null {
+    const fallos = validarPaso(desde);
     if (Object.keys(fallos).length > 0) {
       setErrores(fallos);
-      setErrorGeneral("Revisa los campos marcados.");
-      return;
+      setErrorGeneral("Faltan datos en este paso. Están marcados en rojo.");
+      return null;
     }
 
     setErrores({});
@@ -213,24 +248,56 @@ export default function FormularioLead({
     // R4.1 = "Nada" convierte el lead en RUTA 2. Se comprueba al salir del
     // checklist, no al entrar: el comercial ve el aviso con la respuesta ya
     // dada y entiende por qué le cambia la ruta bajo los pies.
-    if (paso === "checklist" && ruta) {
+    if (desde === "checklist" && ruta) {
       const nueva = rutaReencaminada(CHECKLISTS[ruta], checklist);
       if (nueva && nueva !== ruta) {
         fijarRuta(nueva, arbol);
-        setChecklist({});
         setAviso(
           `Sin documentación no hay proyecto que presupuestar. El lead pasa a ` +
             `${DEFINICION_RUTA[nueva].nombre}: responde su checklist.`,
         );
-        return;
+        return null;
       }
     }
 
-    const siguiente = PASOS[PASOS.findIndex((x) => x.id === paso) + 1];
+    return PASOS[PASOS.findIndex((x) => x.id === desde) + 1]?.id ?? null;
+  }
+
+  function avanzar() {
+    const siguiente = intentarAvanzar(paso);
     if (!siguiente) return;
-    setPaso(siguiente.id);
-    setAlcanzado((a) => Math.max(a, PASOS.findIndex((x) => x.id === siguiente.id)));
+
+    setPaso(siguiente);
+    setAlcanzado((a) => Math.max(a, PASOS.findIndex((x) => x.id === siguiente)));
     setAviso(null);
+  }
+
+  /** Navegación desde la barra de pasos. */
+  function irA(destino: Paso) {
+    const iDestino = PASOS.findIndex((x) => x.id === destino);
+    const iActual = PASOS.findIndex((x) => x.id === paso);
+
+    // Hacia atrás, libre: es la forma de corregir algo ya respondido.
+    if (iDestino <= iActual) {
+      setErrorGeneral(null);
+      setPaso(destino);
+      return;
+    }
+
+    // Hacia delante se valida paso a paso. Si uno falla, se para ahí con los
+    // campos marcados, en vez de dejar llegar a Revisión un lead incompleto.
+    let cursor = paso;
+    for (let i = iActual; i < iDestino; i++) {
+      const siguiente = intentarAvanzar(cursor);
+      if (!siguiente) {
+        setPaso(cursor);
+        return;
+      }
+      cursor = siguiente;
+    }
+
+    setPaso(cursor);
+    setAlcanzado((a) => Math.max(a, iDestino));
   }
 
   function retroceder() {
@@ -294,8 +361,20 @@ export default function FormularioLead({
       const data = await res.json();
 
       if (res.status === 422) {
-        setErrores(data.errores ?? {});
-        setErrorGeneral("Revisa los campos marcados.");
+        const fallos: Record<string, string> = data.errores ?? {};
+        setErrores(fallos);
+        const destino = Object.keys(fallos)
+          .map(pasoDelCampo)
+          .sort((a, b) =>
+            PASOS.findIndex((p) => p.id === a) - PASOS.findIndex((p) => p.id === b),
+          )[0];
+
+        if (destino && destino !== "revision") {
+          setPaso(destino);
+          setErrorGeneral("Faltan datos en este paso. Están marcados en rojo.");
+        } else {
+          setErrorGeneral("Revisa los campos marcados en rojo.");
+        }
       } else if (!res.ok) {
         setErrorGeneral(data.error ?? "No se ha podido guardar el lead.");
       } else {
@@ -352,7 +431,7 @@ export default function FormularioLead({
 
   return (
     <div>
-      <BarraPasos actual={paso} alcanzado={alcanzado} onIr={setPaso} />
+      <BarraPasos actual={paso} alcanzado={alcanzado} conError={pasosConError} onIr={setPaso} />
 
       {aviso && (
         <p className="mb-6 border border-line bg-accent-soft px-4 py-3 text-sm">{aviso}</p>

@@ -345,6 +345,26 @@
     background-color: var(--panel);
     padding: 1.5rem;
   }
+
+  input[aria-invalid="true"],
+  select[aria-invalid="true"],
+  textarea[aria-invalid="true"] {
+    border-color: var(--bloqueo);
+    background-color: color-mix(in oklab, var(--campo), var(--bloqueo) 6%);
+  }
+
+  input[aria-invalid="true"]:focus,
+  select[aria-invalid="true"]:focus,
+  textarea[aria-invalid="true"]:focus {
+    border-color: var(--bloqueo);
+  }
+
+  .traza[data-activo="true"] {
+    color: var(--tinta);
+  }
+  .traza[data-error="true"] {
+    color: var(--bloqueo);
+  }
 }
 
   .opcion {

@@ -134,11 +134,11 @@ const base = z.object({
   cargo: z.string().trim().optional(),
   ciudadPais: z.string().trim().min(2, "Indica ciudad y país"),
   web: z.union([z.string().trim().url("La web tiene que empezar por https://"), z.literal("")]).optional(),
-  fuente: z.enum(FUENTES),
-  idioma: z.enum(IDIOMAS),
-  sector: z.enum(SECTORES),
-  empleados: z.enum(EMPLEADOS),
-  facturacion: z.enum(FACTURACION),
+  fuente: z.enum(FUENTES, "Indica de dónde viene el lead"),
+  idioma: z.enum(IDIOMAS, "Selecciona el idioma"),
+  sector: z.enum(SECTORES, "Selecciona el sector"),
+  empleados: z.enum(EMPLEADOS, "Selecciona el número de empleados"),
+  facturacion: z.enum(FACTURACION, "Selecciona la facturación"),
   herramientas: z.string().trim().optional(),
   valorEstimado: z.number().nonnegative().optional(),
   notas: z.string().trim().optional(),
@@ -150,6 +150,22 @@ const base = z.object({
   checklist: z.record(z.string(), z.unknown()).default({}),
   arbol: z.record(z.string(), z.string()).default({}),
   procesos: z.array(z.enum(PROCESOS)).default([]),
+});
+
+export const contactoSchema = base.pick({
+  nombre: true,
+  email: true,
+  telefono: true,
+  empresa: true,
+  cargo: true,
+  ciudadPais: true,
+  web: true,
+  fuente: true,
+  idioma: true,
+  sector: true,
+  empleados: true,
+  facturacion: true,
+  herramientas: true,
 });
 
 export const leadSchema = base.superRefine((lead, ctx) => {
