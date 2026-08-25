@@ -1,11 +1,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-/**
- * Refresca la sesión de Supabase en cada petición y decide quién pasa.
- * Sin esto, el token expira y los Server Components ven al usuario como anónimo.
- */
+const RUTAS_AUTOGESTIONADAS = ["/api/ghl/spinoffs/sync"];
+
 export async function middleware(request: NextRequest) {
+  const ruta = request.nextUrl.pathname;
+
+  if (RUTAS_AUTOGESTIONADAS.some((r) => ruta === r || ruta.startsWith(r + "/"))) {
+    return NextResponse.next();
+  }
+
   let respuesta = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -25,13 +29,10 @@ export async function middleware(request: NextRequest) {
     },
   );
 
-  // getUser() valida el token contra Supabase. No uses getSession() aquí:
-  // lee la cookie sin verificarla y es falsificable.
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const ruta = request.nextUrl.pathname;
   const esRutaPublica = ruta.startsWith("/login");
 
   // Sin sesión y fuera del login → al login
@@ -41,10 +42,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Con sesión y en el login → al listado
   if (user && esRutaPublica) {
     const url = request.nextUrl.clone();
-    url.pathname = "/leads";
+    url.pathname = "/";
     return NextResponse.redirect(url);
   }
 
@@ -53,10 +53,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Todo excepto estáticos e imágenes. Las rutas /api SÍ pasan por aquí
-     * a propósito: /api/leads escribe en GHL y no puede quedar abierta.
-     */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|pdf)$).*)",
   ],
 };

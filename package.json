@@ -8,16 +8,22 @@
     "start": "next start",
     "lint": "eslint",
     "ghl:discover": "node --env-file=.env.local scripts/ghl-discover.mjs",
-    "ghl:smoke": "node --env-file=.env.local scripts/ghl-smoke.mjs"
+    "ghl:smoke": "node --env-file=.env.local scripts/ghl-smoke.mjs",
+    "ghl:spinoffs": "node --env-file=.env.local scripts/ghl-spinoffs.mjs",
+    "ghl:oportunidad": "node --env-file=.env.local scripts/ghl-oportunidad.mjs",
+    "ghl:campos": "node scripts/ghl-campos.mjs",
+    "ia:prueba": "node --env-file=.env.local scripts/ia-prueba.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
+    "@react-pdf/renderer": "^4.8.1",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.31.0",
     "next": "16.3.1",
+    "pdf-lib": "^1.17.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "server-only": "^0.0.1",

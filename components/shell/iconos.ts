@@ -13,6 +13,7 @@ import {
   Building2,
   TrendingUp,
   Settings,
+  FileText
 } from "lucide-react";
 import type { ClaveModulo } from "@/lib/modulos";
 
@@ -24,4 +25,5 @@ export const ICONOS: Record<ClaveModulo, LucideIcon> = {
   spinoffs: Building2,
   rentabilidad: TrendingUp,
   admin: Settings,
+  documentos: FileText,
 };

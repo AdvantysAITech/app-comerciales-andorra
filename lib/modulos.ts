@@ -11,6 +11,7 @@
 
 export type ClaveModulo =
   | "captacion"
+  | "documentos"
   | "nfc"
   | "consultoria"
   | "iso42001"
@@ -30,16 +31,21 @@ export const GRUPOS: { clave: Grupo; etiqueta: string }[] = [
 export type Modulo = {
   clave: ClaveModulo;
   nombre: string;
-  /** Frase corta para tooltips y la pantalla de inicio. */
   descripcion: string;
-  /** Raiz de la seccion. Todo lo que cuelgue de aqui comparte permiso. */
   ruta: string;
   grupo: Grupo;
-  /** false = aun no existe; se muestra apagado y no navega. */
   disponible: boolean;
 };
 
 export const MODULOS: Modulo[] = [
+    {
+    clave: "documentos",
+    nombre: "Documentos",
+    descripcion: "Propuestas de alcance y validación",
+    ruta: "/documentos",
+    grupo: "comercial",
+    disponible: true,
+  },
   {
     clave: "captacion",
     nombre: "Captación",

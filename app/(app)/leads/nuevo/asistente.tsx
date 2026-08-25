@@ -2,41 +2,57 @@
 
 import { useState } from "react";
 import {
-  PREGUNTAS_ASISTENTE,
-  sugerirClasificacion,
-  type RespuestasAsistente,
-  type Sugerencia,
-} from "@/lib/domain/lead";
-import { ETIQUETA_LINEA, ETIQUETA_ROL } from "@/lib/domain/tipos";
+  PREGUNTAS_T5,
+  sugerirRuta,
+  type RespuestasT5,
+  type SugerenciaRuta,
+} from "@/lib/domain/asistente";
+import { DEFINICION_RUTA } from "@/lib/domain/rutas";
+import type { Spinoff } from "@/lib/ghl/spinoffs";
 
-const TEXTO_CONFIANZA: Record<Sugerencia["confianza"], string> = {
+const TEXTO_CONFIANZA: Record<SugerenciaRuta["confianza"], string> = {
   alta: "Confianza alta",
   media: "Confianza media",
   baja: "Confianza baja — revísalo",
 };
 
 export default function Asistente({
+  spinoffs,
   onAplicar,
   onCerrar,
 }: {
-  onAplicar: (s: Sugerencia) => void;
+  spinoffs: Spinoff[];
+  onAplicar: (s: SugerenciaRuta) => void;
   onCerrar: () => void;
 }) {
-  const [respuestas, setRespuestas] = useState<RespuestasAsistente>({});
+  const [respuestas, setRespuestas] = useState<RespuestasT5>({});
+
+  // Las opciones de la pregunta de vertical salen de la caché, no de una lista
+  // escrita a mano: si mañana entra una quinta spin-off, aparece sola.
+  const preguntas = PREGUNTAS_T5.map((p) =>
+    p.id === "vertical"
+      ? {
+          ...p,
+          opciones: [
+            ...spinoffs.map((s) => ({ valor: s.clave, etiqueta: s.nombre })),
+            { valor: "no", etiqueta: "No, ninguna" },
+          ],
+        }
+      : p,
+  );
 
   const responder = (id: string, valor: string) =>
     setRespuestas((r) => ({ ...r, [id]: valor }));
 
   // Se revela una pregunta cada vez, pero todas quedan visibles y editables:
   // el comercial puede corregir una respuesta sin empezar de cero.
-  const visibles = PREGUNTAS_ASISTENTE.filter((p, i) => {
+  const visibles = preguntas.filter((p, i) => {
     if (i === 0) return true;
-    const anterior = PREGUNTAS_ASISTENTE[i - 1].id;
-    return respuestas[anterior] !== undefined;
+    return respuestas[preguntas[i - 1].id] !== undefined;
   });
 
-  const sugerencia = sugerirClasificacion(respuestas);
-  const completo = PREGUNTAS_ASISTENTE.every((p) => respuestas[p.id] !== undefined);
+  const sugerencia = sugerirRuta(respuestas);
+  const completo = preguntas.every((p) => respuestas[p.id] !== undefined);
 
   return (
     <div
@@ -83,8 +99,7 @@ export default function Asistente({
           <div className="mt-7 border-l-2 border-accent bg-accent-soft px-5 py-4">
             <p className="traza">Sugerencia · {TEXTO_CONFIANZA[sugerencia.confianza]}</p>
             <p className="mt-2 font-medium">
-              {ETIQUETA_LINEA[sugerencia.linea]}
-              {sugerencia.rolJV ? ` · ${ETIQUETA_ROL[sugerencia.rolJV]}` : ""}
+              {DEFINICION_RUTA[sugerencia.ruta].nombre}
             </p>
             <p className="mt-1 text-sm text-muted">{sugerencia.motivo}</p>
             {!completo && (

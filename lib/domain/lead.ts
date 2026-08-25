@@ -1,10 +1,8 @@
-/**
- * Validación y asistente de clasificación. DERCAS v3.4 — RF-16, CA-07a, CA-07b.
- * TypeScript puro: ni Next ni GHL. Toda la lógica de detección vive aquí.
- */
 import { z } from "zod";
 import { LINEAS, ROLES_JV, type LineaNegocio, type RolJV } from "./tipos";
 import { PREGUNTAS_BANT, type CriterioBant } from "./bant";
+import { SERVICIOS, MODALIDADES, serviciosDisponibles, type Servicio } from "./servicio";
+import { RUTAS, requiereSpinoff } from "./rutas";
 
 export const FUENTES = [
   "linkedin",
@@ -20,7 +18,6 @@ export type Fuente = (typeof FUENTES)[number];
 export const IDIOMAS = ["es", "ca", "en"] as const;
 export type Idioma = (typeof IDIOMAS)[number];
 
-/** Texto EXACTO de las opciones en GHL. Si cambias una opción allí, cámbiala aquí. */
 export const ETIQUETA_FUENTE: Record<Fuente, string> = {
   linkedin: "LinkedIn",
   referido: "Referido",
@@ -36,10 +33,6 @@ export const ETIQUETA_IDIOMA: Record<Idioma, string> = {
   ca: "Català",
   en: "English",
 };
-
-/* ------------------------------------------------------------------ */
-/* Catálogos de empresa (sección 4.1)                                  */
-/* ------------------------------------------------------------------ */
 
 export const SECTORES = [
   "educacion",
@@ -91,6 +84,25 @@ export const ETIQUETA_FACTURACION: Record<Facturacion, string> = {
   mas_50m: "Más de 50M",
 };
 
+export const PROCESOS = [
+  "ventas",
+  "marketing",
+  "rrhh",
+  "finanzas",
+  "operaciones",
+  "otro",
+] as const;
+export type Proceso = (typeof PROCESOS)[number];
+
+export const ETIQUETA_PROCESO: Record<Proceso, string> = {
+  ventas: "Ventas",
+  marketing: "Marketing",
+  rrhh: "RRHH",
+  finanzas: "Finanzas",
+  operaciones: "Operaciones",
+  otro: "Otro",
+};
+
 /* ------------------------------------------------------------------ */
 /* Esquema de alta                                                     */
 /* ------------------------------------------------------------------ */
@@ -124,31 +136,31 @@ const base = z.object({
   web: z.union([z.string().trim().url("La web tiene que empezar por https://"), z.literal("")]).optional(),
   fuente: z.enum(FUENTES),
   idioma: z.enum(IDIOMAS),
-  valorEstimado: z.number().nonnegative().optional(),
-  pain: z.string().trim().optional(),
-  notas: z.string().trim().optional(),
-  uuid: z.uuid("Falta el identificador del lead"),
-  bant: bantSchema.default({}),
   sector: z.enum(SECTORES),
   empleados: z.enum(EMPLEADOS),
   facturacion: z.enum(FACTURACION),
   herramientas: z.string().trim().optional(),
+  valorEstimado: z.number().nonnegative().optional(),
+  notas: z.string().trim().optional(),
+  uuid: z.uuid("Falta el identificador del lead"),
+  bant: bantSchema.default({}),
+  ruta: z.enum(RUTAS),
+  spinoffClave: z.string().optional(),
+  faseId: z.string().optional(),
+  checklist: z.record(z.string(), z.unknown()).default({}),
+  arbol: z.record(z.string(), z.string()).default({}),
+  procesos: z.array(z.enum(PROCESOS)).default([]),
 });
 
-/**
- * RF-16: la App Comercial nunca deja un lead sin clasificar.
- * En JV Builder, Spin-off y Rol son obligatorios (CA-07b). El discriminatedUnion
- * hace que sea imposible construir un lead válido sin ellos.
- */
-export const leadSchema = z.discriminatedUnion("linea", [
-  base.extend({ linea: z.literal("consultoria") }),
-  base.extend({ linea: z.literal("iso42001") }),
-  base.extend({
-    linea: z.literal("jv_builder"),
-    spinoffClave: z.string().min(1, "Selecciona la spin-off"),
-    rolJV: z.enum(ROLES_JV, { message: "Selecciona Cliente Final o Inversor" }),
-  })
-]);
+export const leadSchema = base.superRefine((lead, ctx) => {
+  if (requiereSpinoff(lead.ruta) && !lead.spinoffClave) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["spinoffClave"],
+      message: "Selecciona la spin-off",
+    });
+  }
+});
 
 export type LeadInput = z.infer<typeof leadSchema>;
 
@@ -264,3 +276,6 @@ export const PREGUNTAS_ASISTENTE = [
 
 export { LINEAS, ROLES_JV };
 export type { LineaNegocio, RolJV };
+export { SERVICIOS, MODALIDADES, serviciosDisponibles, servicioUnico } from "./servicio";
+export { ETIQUETA_SERVICIO, ETIQUETA_MODALIDAD } from "./servicio";
+export type { Servicio, Modalidad } from "./servicio";
