@@ -87,6 +87,7 @@ export default async function EditarLead({
     muestraProcesos: muestraProcesosCriticos({
       ruta: lead.ruta as Ruta | null,
       sector: lead.sector,
+      spinoffClave: lead.spinoff_clave,
     }),
   };
 

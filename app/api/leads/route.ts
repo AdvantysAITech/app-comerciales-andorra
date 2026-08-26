@@ -56,7 +56,11 @@ export async function POST(request: Request) {
   // BANT de inversor escrito en GHL dispararía los workflows de cualificación
   // sobre una oportunidad que no es una venta.
   const inversor = esInversor(lead.ruta);
-  const conProcesos = muestraProcesosCriticos({ ruta: lead.ruta, sector: lead.sector });
+  const conProcesos = muestraProcesosCriticos({
+    ruta: lead.ruta,
+    sector: lead.sector,
+    spinoffClave: lead.spinoffClave,
+  });
 
   const respuestasBant = inversor ? {} : lead.bant;
   const procesos = conProcesos ? lead.procesos : [];

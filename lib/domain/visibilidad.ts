@@ -17,10 +17,16 @@ import { DEFINICION_RUTA, type Ruta } from "./rutas";
 /** Clave interna del sector educativo en `SECTORES`. */
 export const SECTOR_EDUCACION = "educacion";
 
+/** Clave interna estable de la spin-off educativa (IA con Criterio). No
+ *  cambia aunque cambie el nombre comercial. */
+export const SPINOFF_EDUCACION = "educacion";
+
 export type ContextoLead = {
   ruta: Ruta | null;
   /** Clave interna, no la etiqueta de GHL. */
   sector?: string | null;
+  /** Clave interna de la spin-off elegida, si la ruta es de spin-off. */
+  spinoffClave?: string | null;
 };
 
 /* ------------------------------------------------------------------ */
@@ -33,14 +39,23 @@ export function esInversor(ruta: Ruta | null | undefined): boolean {
 }
 
 /**
- * Institutos y universidades. Se decide POR SECTOR, no por spin-off: un
- * colegio puede llegar por la vertical educativa o por consultoría normal, y
- * en los dos casos la conversación de «procesos críticos a automatizar»
+ * Institutos y universidades.
+ *
+ * Se detecta por DOS vías, y basta con una: el sector declarado en el paso de
+ * contacto, o la spin-off educativa elegida en el de clasificación. Con solo
+ * el sector se escapaba el caso más frecuente —un colegio que entra por la
+ * vertical de IA con Criterio, donde el comercial rellena el sector con lo
+ * que le parece o lo deja en «Otro»—; con solo la spin-off se escapaba una
+ * universidad que llega por consultoría normal.
+ *
+ * En los dos casos la conversación de «procesos críticos a automatizar»
  * (marketing, ventas, RRHH…) no encaja con cómo compra una institución
- * educativa.
+ * educativa, que es lo que la regla intenta evitar.
  */
-export function esEducacion(ctx: Pick<ContextoLead, "sector">): boolean {
-  return ctx.sector === SECTOR_EDUCACION;
+export function esEducacion(
+  ctx: Pick<ContextoLead, "sector" | "spinoffClave">,
+): boolean {
+  return ctx.sector === SECTOR_EDUCACION || ctx.spinoffClave === SPINOFF_EDUCACION;
 }
 
 /** El BANT cualifica una compra. Un inversor no compra: aporta capital. */

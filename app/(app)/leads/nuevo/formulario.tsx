@@ -157,7 +157,11 @@ export default function FormularioLead({
      cada render porque dependen de la ruta y del sector, y los dos cambian
      mientras el comercial rellena. */
   const inversor = esInversor(ruta);
-  const conProcesos = muestraProcesosCriticos({ ruta, sector: campos.sector || null });
+  const conProcesos = muestraProcesosCriticos({
+    ruta,
+    sector: campos.sector || null,
+    spinoffClave: spinoffClave || null,
+  });
   const conPresupuesto = generaPresupuesto(ruta);
 
   /** Los pasos vigentes. Con RUTA 7 son cuatro: el BANT desaparece. */

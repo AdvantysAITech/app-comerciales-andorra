@@ -80,6 +80,7 @@ type FilaLead = {
   contacto_existia: boolean | null;
   linea_negocio: LineaNegocio;
   rol_jv: RolJV | null;
+  spinoff_clave: string | null;
   spinoff_nombre: string | null;
   servicio: Servicio | null;
   ruta: string | null;
@@ -131,7 +132,10 @@ export async function PATCH(
   const inversor = esInversor(lead.ruta as Ruta | null);
   const conProcesos = muestraProcesosCriticos({
     ruta: lead.ruta as Ruta | null,
+    // El sector viene del formulario porque es editable; la spin-off, de la
+    // fila, porque no lo es (determina el pipeline).
     sector: d.sector,
+    spinoffClave: lead.spinoff_clave,
   });
 
   const respuestasBant = inversor ? {} : d.bant;
