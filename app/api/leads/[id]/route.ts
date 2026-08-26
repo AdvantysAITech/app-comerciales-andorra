@@ -18,6 +18,8 @@ import {
   PROCESOS,
 } from "@/lib/domain/lead";
 import { calcularBant } from "@/lib/domain/bant";
+import type { Ruta } from "@/lib/domain/rutas";
+import { esInversor, muestraProcesosCriticos } from "@/lib/domain/visibilidad";
 import type { LineaNegocio, RolJV } from "@/lib/domain/tipos";
 import type { Servicio } from "@/lib/domain/servicio";
 import {
@@ -122,7 +124,19 @@ export async function PATCH(
   if (!data) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
   const lead = data as FilaLead;
-  const bant = calcularBant(d.bant);
+
+  // Mismas reglas que en el alta, aplicadas sobre la ruta ya guardada: la
+  // pantalla oculta estos bloques, y aquí se garantiza que tampoco lleguen a
+  // GHL si alguien llama al PATCH directamente.
+  const inversor = esInversor(lead.ruta as Ruta | null);
+  const conProcesos = muestraProcesosCriticos({
+    ruta: lead.ruta as Ruta | null,
+    sector: d.sector,
+  });
+
+  const respuestasBant = inversor ? {} : d.bant;
+  const procesos = conProcesos ? d.procesos : [];
+  const bant = calcularBant(respuestasBant);
 
   /* --- 1. Supabase primero ---------------------------------------- */
 
@@ -146,8 +160,8 @@ export async function PATCH(
       facturacion: d.facturacion,
       herramientas: d.herramientas ?? null,
       notas: d.notas ?? null,
-      procesos: d.procesos,
-      bant: d.bant,
+      procesos,
+      bant: respuestasBant,
       bant_score: bant.respondidas > 0 ? bant.total : null,
       bant_clasificacion: bant.respondidas > 0 ? bant.clasificacion : null,
       bant_completo: bant.completo,
@@ -203,8 +217,8 @@ export async function PATCH(
         servicio: lead.servicio ?? undefined,
         valorEstimado: d.valorEstimado,
         pain,
-        procesos: d.procesos.map((p) => ETIQUETA_PROCESO[p]),
-        bant: d.bant,
+        procesos: procesos.map((p) => ETIQUETA_PROCESO[p]),
+        bant: respuestasBant,
       });
     }
   } catch (error) {

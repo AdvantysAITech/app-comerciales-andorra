@@ -9,6 +9,11 @@ import {
   ETIQUETA_PROCESO
 } from "@/lib/domain/lead";
 import { DEFINICION_RUTA, ETIQUETA_RUTA, requiereSpinoff } from "@/lib/domain/rutas";
+import {
+  esInversor,
+  muestraProcesosCriticos,
+  etiquetaInfoInversores,
+} from "@/lib/domain/visibilidad";
 import { ETIQUETA_LINEA, ETIQUETA_ROL } from "@/lib/domain/tipos";
 import { CLASIFICACION, calcularBant } from "@/lib/domain/bant";
 import {
@@ -40,8 +45,24 @@ export async function POST(request: Request) {
   const lead = parsed.data;
   const definicion = DEFINICION_RUTA[lead.ruta];
   const esSpinoff = requiereSpinoff(lead.ruta);
-  const bant = calcularBant(lead.bant);
   const checklist = lead.checklist as RespuestasChecklist;
+
+  /* ---------------------------------------------------------------- */
+  /* Visibilidad                                                       */
+  /* ---------------------------------------------------------------- */
+
+  // Se vuelve a aplicar aquí lo que la pantalla ya oculta. No es desconfianza
+  // del comercial: el POST se puede lanzar sin pasar por la pantalla, y un
+  // BANT de inversor escrito en GHL dispararía los workflows de cualificación
+  // sobre una oportunidad que no es una venta.
+  const inversor = esInversor(lead.ruta);
+  const conProcesos = muestraProcesosCriticos({ ruta: lead.ruta, sector: lead.sector });
+
+  const respuestasBant = inversor ? {} : lead.bant;
+  const procesos = conProcesos ? lead.procesos : [];
+  const infoInversores = inversor ? lead.quiereInfoInversores : false;
+
+  const bant = calcularBant(respuestasBant);
 
   /* ---------------------------------------------------------------- */
   /* Validación del checklist                                          */
@@ -123,7 +144,8 @@ export async function POST(request: Request) {
     precio_version: calculo.version,
     estado_presupuesto: calculo.estado,
     motivos_revision: calculo.motivos,
-    procesos: lead.procesos,
+    procesos,
+    info_inversores: infoInversores,
     sector: lead.sector,
     empleados: lead.empleados,
     facturacion: lead.facturacion,
@@ -225,7 +247,7 @@ export async function POST(request: Request) {
         valorEstimado: calculo.presentado ?? lead.valorEstimado,
         servicio: definicion.servicio,
         estadoPresupuesto: calculo.estado,
-        bant: lead.bant,
+        bant: respuestasBant,
         uuid: lead.uuid,
         ruta: ETIQUETA_RUTA[lead.ruta],
         pain: (() => {
@@ -233,7 +255,9 @@ export async function POST(request: Request) {
           const valor = id ? conContexto[id] : undefined;
           return typeof valor === "string" ? valor : undefined;
         })(),
-        procesos: lead.procesos.map((p) => ETIQUETA_PROCESO[p]),
+        procesos: procesos.map((p) => ETIQUETA_PROCESO[p]),
+        // Solo se manda en rutas de inversor: en el resto el campo ni se toca.
+        infoInversores: inversor ? infoInversores : undefined,
       },
       contacto.id,
     );
@@ -246,13 +270,20 @@ export async function POST(request: Request) {
         `Alta desde la App Comercial por ${user.email}.`,
         `Ruta: ${ETIQUETA_RUTA[lead.ruta]} — ${definicion.nombre}.`,
         esSpinoff ? `Spin-off: ${spinoffNombre} · ${ETIQUETA_ROL[definicion.rolJV!]}.` : null,
-        bant.respondidas > 0
-          ? `BANT: ${bant.total}/10 — ${CLASIFICACION[bant.clasificacion].tag}` +
-            (bant.completo ? "" : ` (provisional, ${bant.respondidas}/6)`)
-          : "BANT: sin cualificar todavía.",
-        calculo.presentado !== null
-          ? `Presupuesto: ${calculo.presentado.toLocaleString("es-ES")} € · ${calculo.estado}.`
-          : `Presupuesto: ${calculo.estado}.`,
+        inversor
+          ? "BANT: no aplica — oportunidad de inversión, no de venta."
+          : bant.respondidas > 0
+            ? `BANT: ${bant.total}/10 — ${CLASIFICACION[bant.clasificacion].tag}` +
+              (bant.completo ? "" : ` (provisional, ${bant.respondidas}/6)`)
+            : "BANT: sin cualificar todavía.",
+        inversor
+          ? `Información para inversores: ${etiquetaInfoInversores(infoInversores)}.`
+          : null,
+        inversor
+          ? "Presupuesto: no aplica — un inversor no recibe propuesta."
+          : calculo.presentado !== null
+            ? `Presupuesto: ${calculo.presentado.toLocaleString("es-ES")} € · ${calculo.estado}.`
+            : `Presupuesto: ${calculo.estado}.`,
         // Los motivos de revisión van a la nota de GHL, que solo ven Jacob y el
         // equipo interno. Nunca al documento del cliente.
         ...calculo.motivos.map((m) => `· ${m}`),

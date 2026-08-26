@@ -8,6 +8,7 @@ import { calcularBant } from "@/lib/domain/bant";
 import type { RespuestasChecklist } from "@/lib/domain/checklists";
 import { SPINOFF } from "@/lib/domain/checklists";
 import type { Ruta } from "@/lib/domain/rutas";
+import { generaPresupuesto } from "@/lib/domain/visibilidad";
 import type { RespuestasBant } from "@/lib/domain/bant";
 
 export const runtime = "nodejs";
@@ -39,6 +40,20 @@ export async function POST(
   if (lead.resultado !== "creado") {
     return NextResponse.json(
       { error: "Este lead no está registrado correctamente. Revísalo antes de generar." },
+      { status: 409 },
+    );
+  }
+
+  // A un inversor no se le genera propuesta. El botón ya no se ofrece en
+  // ninguna pantalla, pero el endpoint es público para cualquier sesión
+  // válida y una llamada directa no puede saltarse la regla.
+  if (!generaPresupuesto(lead.ruta as Ruta)) {
+    return NextResponse.json(
+      {
+        error:
+          "Este lead es un inversor: no lleva propuesta. La información de " +
+          "inversión se la envía el Sistema Advantys automáticamente.",
+      },
       { status: 409 },
     );
   }

@@ -5,6 +5,8 @@ import { sesionActual, puedeVer } from "@/lib/permisos";
 import { ETIQUETA_LINEA, ETIQUETA_ROL, type LineaNegocio, type RolJV } from "@/lib/domain/tipos";
 import type { Proceso } from "@/lib/domain/lead";
 import type { RespuestasBant } from "@/lib/domain/bant";
+import type { Ruta } from "@/lib/domain/rutas";
+import { esInversor, muestraProcesosCriticos } from "@/lib/domain/visibilidad";
 import FormularioEdicion, { type LeadEditable } from "./formulario-edicion";
 
 export const dynamic = "force-dynamic";
@@ -79,6 +81,13 @@ export default async function EditarLead({
       .filter(Boolean)
       .join(" · "),
     tieneDocumento: Boolean(documento),
+    // Las mismas reglas del alta, resueltas en servidor sobre el lead ya
+    // guardado. El formulario de edición solo recibe dos booleanos.
+    esInversor: esInversor(lead.ruta as Ruta | null),
+    muestraProcesos: muestraProcesosCriticos({
+      ruta: lead.ruta as Ruta | null,
+      sector: lead.sector,
+    }),
   };
 
   return (

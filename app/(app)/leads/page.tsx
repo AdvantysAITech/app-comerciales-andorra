@@ -108,6 +108,9 @@ export default async function MisLeads() {
       enlaceContacto: enlaceContacto(lead.ghl_contacto_id),
       enlaceOportunidad: enlaceOportunidad(lead.ghl_oportunidad_id),
       documentoId: documentoPorLead.get(lead.id) ?? null,
+      // Se decide en servidor a partir del rol ya guardado, no reinterpretando
+      // la ruta en el navegador.
+      esInversor: lead.rol_jv === "inversor",
     };
   });
 

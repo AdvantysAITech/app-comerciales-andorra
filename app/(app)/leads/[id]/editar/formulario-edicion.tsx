@@ -48,6 +48,10 @@ export type LeadEditable = {
   /** Solo para mostrar. No se puede cambiar: determina el pipeline. */
   clasificacion: string;
   tieneDocumento: boolean;
+  /** RUTA 7: sin BANT y sin procesos críticos. */
+  esInversor: boolean;
+  /** false para inversores y para sector educativo. */
+  muestraProcesos: boolean;
 };
 
 export default function FormularioEdicion({ lead }: { lead: LeadEditable }) {
@@ -62,6 +66,7 @@ export default function FormularioEdicion({ lead }: { lead: LeadEditable }) {
   const [confirmando, setConfirmando] = useState(false);
 
   const resultado = calcularBant(bant);
+  const conProcesos = lead.muestraProcesos && !lead.esInversor;
   const set = (k: keyof LeadEditable) => (v: string) => setCampos((c) => ({ ...c, [k]: v }));
 
   async function guardar() {
@@ -89,8 +94,10 @@ export default function FormularioEdicion({ lead }: { lead: LeadEditable }) {
           facturacion: campos.facturacion,
           herramientas: campos.herramientas || undefined,
           notas: campos.notas || undefined,
-          procesos: campos.procesos,
-          bant,
+          // Lo que no se muestra tampoco se manda: si un lead se reclasificó
+          // o cambió de sector, esto lo deja limpio en el CRM.
+          procesos: conProcesos ? campos.procesos : [],
+          bant: lead.esInversor ? {} : bant,
         }),
       });
 
@@ -210,6 +217,7 @@ export default function FormularioEdicion({ lead }: { lead: LeadEditable }) {
           <Lista etiqueta="Facturación" valor={campos.facturacion} onCambio={set("facturacion")} opciones={FACTURACION} etiquetas={ETIQUETA_FACTURACION} />
         </div>
 
+        {conProcesos && (
         <div className="mt-5">
           <p className="etiqueta">Procesos críticos</p>
           <div className="flex flex-wrap gap-2">
@@ -233,6 +241,7 @@ export default function FormularioEdicion({ lead }: { lead: LeadEditable }) {
             ))}
           </div>
         </div>
+        )}
 
         <div className="mt-5">
           <label className="etiqueta" htmlFor="notas">
@@ -249,6 +258,9 @@ export default function FormularioEdicion({ lead }: { lead: LeadEditable }) {
       </div>
 
       {/* ---------- BANT ---------- */}
+      {/* Un inversor no se cualifica: aporta capital, no compra. El bloque
+          entero desaparece y el PATCH manda el BANT vacío. */}
+      {!lead.esInversor && (
       <div>
         <p className="traza mb-4">Cualificación BANT</p>
         <div className="space-y-7">
@@ -301,6 +313,14 @@ export default function FormularioEdicion({ lead }: { lead: LeadEditable }) {
           </div>
         )}
       </div>
+      )}
+
+      {lead.esInversor && (
+        <p className="border-l-2 border-accent bg-accent-soft px-5 py-4 text-sm">
+          Oportunidad de inversión: no se cualifica con BANT ni se le genera
+          propuesta. La información de inversión la envía el Sistema Advantys.
+        </p>
+      )}
 
       {errorGeneral && <p className="error">{errorGeneral}</p>}
       {aviso && (

@@ -30,6 +30,11 @@ import {
   type Ruta,
   type RespuestasArbol,
 } from "@/lib/domain/rutas";
+import {
+  esInversor,
+  generaPresupuesto,
+  muestraProcesosCriticos,
+} from "@/lib/domain/visibilidad";
 import { ETIQUETA_SERVICIO } from "@/lib/domain/servicio";
 import {
   CHECKLISTS,
@@ -50,7 +55,7 @@ import type { Spinoff } from "@/lib/ghl/spinoffs";
 import type { SugerenciaRuta } from "@/lib/domain/asistente";
 import Asistente from "./asistente";
 import RenderChecklist from "./checklist";
-import { BarraPasos, PASOS, type Paso } from "./pasos";
+import { BarraPasos, pasosDe, type Paso } from "./pasos";
 import ArbolClasificacion from "./arbol";
 import GenerarDocumento from "../generar-documento";
 
@@ -94,6 +99,7 @@ const CAMPOS_PASO: Record<string, Paso> = {
   ruta: "clasificacion", spinoffClave: "clasificacion", faseId: "clasificacion",
   bant: "bant",
   uuid: "revision", valorEstimado: "revision", notas: "revision", procesos: "revision",
+  quiereInfoInversores: "revision",
 };
 
 function pasoDelCampo(clave: string): Paso {
@@ -140,13 +146,29 @@ export default function FormularioLead({
 
   const [procesos, setProcesos] = useState<Proceso[]>([]);
 
+  /** RUTA 7 · el inversor pide (o no) el dossier de inversión. */
+  const [quiereInfo, setQuiereInfo] = useState(false);
+
   const resultadoBant = calcularBant(bant);
   const definicion = ruta ? DEFINICION_RUTA[ruta] : null;
   const fases = ruta ? fasesPorRuta[ruta] : [];
 
+  /* Las tres decisiones de visibilidad, en un solo sitio. Se recalculan en
+     cada render porque dependen de la ruta y del sector, y los dos cambian
+     mientras el comercial rellena. */
+  const inversor = esInversor(ruta);
+  const conProcesos = muestraProcesosCriticos({ ruta, sector: campos.sector || null });
+  const conPresupuesto = generaPresupuesto(ruta);
+
+  /** Los pasos vigentes. Con RUTA 7 son cuatro: el BANT desaparece. */
+  const pasos = useMemo(() => pasosDe(ruta), [ruta]);
+
   const pasosConError = useMemo(
-    () => [...new Set(Object.keys(errores).map(pasoDelCampo))],
-    [errores],
+    () =>
+      [...new Set(Object.keys(errores).map(pasoDelCampo))].filter((p) =>
+        pasos.some((x) => x.id === p),
+      ),
+    [errores, pasos],
   );
 
   const set = (clave: keyof Campos) => (valor: string) => {
@@ -172,8 +194,18 @@ export default function FormularioLead({
     if (nueva !== ruta) {
       setChecklist({});
       // Y se retrocede el progreso: con el checklist vacio, Revision ya no es
-      // un paso alcanzado.
-      setAlcanzado((a) => Math.min(a, PASOS.findIndex((p) => p.id === "clasificacion")));
+      // un paso alcanzado. El indice de "clasificacion" es 1 con BANT y sin
+      // el, asi que no depende de la lista filtrada.
+      setAlcanzado((a) => Math.min(a, 1));
+    }
+
+    // RUTA 7: un inversor no se cualifica. Se borra lo que hubiera respondido
+    // antes de cambiar de ruta —si no, el BANT viajaria al POST aunque la
+    // pestana ya no se vea— y, si estaba en esa pestana, se le saca de ella
+    // antes de que quede en un paso que deja de existir.
+    if (esInversor(nueva)) {
+      setBant({});
+      if (paso === "bant") setPaso("clasificacion");
     }
 
     setRuta(nueva);
@@ -260,7 +292,7 @@ export default function FormularioLead({
       }
     }
 
-    return PASOS[PASOS.findIndex((x) => x.id === desde) + 1]?.id ?? null;
+    return pasos[pasos.findIndex((x) => x.id === desde) + 1]?.id ?? null;
   }
 
   function avanzar() {
@@ -268,14 +300,14 @@ export default function FormularioLead({
     if (!siguiente) return;
 
     setPaso(siguiente);
-    setAlcanzado((a) => Math.max(a, PASOS.findIndex((x) => x.id === siguiente)));
+    setAlcanzado((a) => Math.max(a, pasos.findIndex((x) => x.id === siguiente)));
     setAviso(null);
   }
 
   /** Navegación desde la barra de pasos. */
   function irA(destino: Paso) {
-    const iDestino = PASOS.findIndex((x) => x.id === destino);
-    const iActual = PASOS.findIndex((x) => x.id === paso);
+    const iDestino = pasos.findIndex((x) => x.id === destino);
+    const iActual = pasos.findIndex((x) => x.id === paso);
 
     // Hacia atrás, libre: es la forma de corregir algo ya respondido.
     if (iDestino <= iActual) {
@@ -301,7 +333,7 @@ export default function FormularioLead({
   }
 
   function retroceder() {
-    const anterior = PASOS[PASOS.findIndex((x) => x.id === paso) - 1];
+    const anterior = pasos[pasos.findIndex((x) => x.id === paso) - 1];
     if (anterior) setPaso(anterior.id);
     setErrorGeneral(null);
   }
@@ -346,10 +378,14 @@ export default function FormularioLead({
       ruta,
       faseId: faseId || undefined,
       spinoffClave: requiereSpinoff(ruta) ? spinoffClave : undefined,
-      bant,
+      // Lo que no se muestra tampoco se manda. El servidor vuelve a filtrarlo
+      // por su cuenta, pero enviarlo vacio desde aqui evita que un cambio de
+      // ruta a mitad de formulario arrastre respuestas de la ruta anterior.
+      bant: inversor ? {} : bant,
       checklist,
       arbol,
-      procesos,
+      procesos: conProcesos ? procesos : [],
+      quiereInfoInversores: inversor ? quiereInfo : false,
     };
 
     try {
@@ -365,8 +401,9 @@ export default function FormularioLead({
         setErrores(fallos);
         const destino = Object.keys(fallos)
           .map(pasoDelCampo)
+          .filter((p) => pasos.some((x) => x.id === p))
           .sort((a, b) =>
-            PASOS.findIndex((p) => p.id === a) - PASOS.findIndex((p) => p.id === b),
+            pasos.findIndex((p) => p.id === a) - pasos.findIndex((p) => p.id === b),
           )[0];
 
         if (destino && destino !== "revision") {
@@ -403,6 +440,7 @@ export default function FormularioLead({
     setPaso("contacto");
     setAlcanzado(0);
     setProcesos([]);
+    setQuiereInfo(false);
   }
 
   /* ---------------- Confirmación ---------------- */
@@ -418,8 +456,19 @@ export default function FormularioLead({
             : "Se ha creado el contacto."}{" "}
           La oportunidad está en la fase que has elegido.
         </p>
+        {inversor && (
+          <p className="mt-5 border-l-2 border-accent bg-accent-soft px-4 py-3 text-sm">
+            {quiereInfo
+              ? "Has marcado que quiere recibir informacion para inversores. El " +
+                "Sistema Advantys se la envia automaticamente, con el material de " +
+                "la spin-off que ha elegido. No tienes que mandar nada a mano."
+              : "No has marcado el envio de informacion para inversores. Si cambia " +
+                "de opinion, marcalo desde la ficha del lead."}
+          </p>
+        )}
+
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-          {exito.leadId && <GenerarDocumento leadId={exito.leadId} />}
+          {exito.leadId && conPresupuesto && <GenerarDocumento leadId={exito.leadId} />}
           <button className="boton-fantasma" onClick={otroLead}>Dar de alta otro</button>
           <Link href="/leads" className="boton-fantasma inline-block">Ver mis leads</Link>
         </div>
@@ -431,7 +480,13 @@ export default function FormularioLead({
 
   return (
     <div>
-      <BarraPasos actual={paso} alcanzado={alcanzado} conError={pasosConError} onIr={setPaso} />
+      <BarraPasos
+        pasos={pasos}
+        actual={paso}
+        alcanzado={alcanzado}
+        conError={pasosConError}
+        onIr={setPaso}
+      />
 
       {aviso && (
         <p className="mb-6 border border-line bg-accent-soft px-4 py-3 text-sm">{aviso}</p>
@@ -523,7 +578,9 @@ export default function FormularioLead({
         )}
 
         {/* ---------- Paso 3 · BANT ---------- */}
-        {paso === "bant" && (
+        {/* No se pinta para inversores. `pasos` ya no lo incluye, pero el guardia
+            evita que un cambio de ruta a mitad de render lo deje visible. */}
+        {paso === "bant" && !inversor && (
           <div>
             <p className="mb-6 text-sm text-tinta-media">
               Responde lo que haya salido en la conversación. Lo que dejes en blanco no
@@ -616,37 +673,72 @@ export default function FormularioLead({
               titulo="Fase de entrada"
               valor={fases.find((f) => f.id === faseId)?.nombre ?? "Primera del pipeline"}
             />
-            <Resumen
-              titulo="BANT"
-              valor={
-                resultadoBant.respondidas > 0
-                  ? `${resultadoBant.total.toLocaleString("es-ES")} de 10 · ` +
-                    `${CLASIFICACION[resultadoBant.clasificacion].tag}` +
-                    (resultadoBant.completo ? "" : " (provisional)")
-                  : "Sin cualificar"
-              }
-            />
+            {!inversor && (
+              <Resumen
+                titulo="BANT"
+                valor={
+                  resultadoBant.respondidas > 0
+                    ? `${resultadoBant.total.toLocaleString("es-ES")} de 10 · ` +
+                      `${CLASIFICACION[resultadoBant.clasificacion].tag}` +
+                      (resultadoBant.completo ? "" : " (provisional)")
+                    : "Sin cualificar"
+                }
+              />
+            )}
 
-            <div>
-              <label className="etiqueta">Procesos críticos a automatizar (opcional)</label>
-              <div className="flex flex-wrap gap-2">
-                {PROCESOS.map((p) => (
-                  <button key={p} type="button" className="boton-fantasma"
-                    data-activo={procesos.includes(p)}
-                    onClick={() =>
-                      setProcesos((a) =>
-                        a.includes(p) ? a.filter((x) => x !== p) : [...a, p],
-                      )
-                    }>
-                    {ETIQUETA_PROCESO[p]}
-                  </button>
-                ))}
+            {/* Procesos críticos: fuera para inversores (no tienen procesos
+                que automatizar: aportan capital) y fuera para el sector
+                educativo, donde la conversación no va de marketing ni de
+                ventas. La regla vive en lib/domain/visibilidad.ts. */}
+            {conProcesos && (
+              <div>
+                <label className="etiqueta">Procesos críticos a automatizar (opcional)</label>
+                <div className="flex flex-wrap gap-2">
+                  {PROCESOS.map((p) => (
+                    <button key={p} type="button" className="boton-fantasma"
+                      data-activo={procesos.includes(p)}
+                      onClick={() =>
+                        setProcesos((a) =>
+                          a.includes(p) ? a.filter((x) => x !== p) : [...a, p],
+                        )
+                      }>
+                      {ETIQUETA_PROCESO[p]}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* RUTA 7 · el único campo que se añade para inversores. Viaja a
+                GHL como radio Sí/No y es lo que dispara la automatización de
+                envío del dossier al crearse la oportunidad. */}
+            {inversor && (
+              <div className="border-l-2 border-accent bg-accent-soft px-5 py-4">
+                <label className="flex cursor-pointer items-start gap-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1 size-4 shrink-0 accent-current"
+                    checked={quiereInfo}
+                    onChange={(e) => setQuiereInfo(e.target.checked)}
+                  />
+                  <span>
+                    <span className="block text-sm font-medium">
+                      Quiere recibir información para inversores
+                    </span>
+                    <span className="traza mt-1 block normal-case">
+                      Al guardar, se le envía automáticamente el material de la
+                      spin-off que ha elegido. Márcalo solo si te lo ha pedido.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )}
 
             <div>
               <label className="etiqueta" htmlFor="valorEstimado">
-                Valor estimado del contrato (€, opcional)
+                {inversor
+                  ? "Importe de inversión previsto (€, opcional)"
+                  : "Valor estimado del contrato (€, opcional)"}
               </label>
               <input id="valorEstimado" className="campo" type="number"
                 value={campos.valorEstimado} onChange={(e) => set("valorEstimado")(e.target.value)} />
@@ -658,10 +750,18 @@ export default function FormularioLead({
                 onChange={(e) => set("notas")(e.target.value)} />
             </div>
 
-            {!definicion.calculaPrecio && (
+            {!conPresupuesto ? (
               <p className="border-l-2 border-block bg-elevado px-4 py-3 text-sm">
-                Esta ruta no calcula precio en la app. No comprometas cifras con el cliente.
+                A un inversor no se le genera propuesta: lo que recibe es
+                información de inversión. No comprometas cifras ni condiciones
+                de entrada.
               </p>
+            ) : (
+              !definicion.calculaPrecio && (
+                <p className="border-l-2 border-block bg-elevado px-4 py-3 text-sm">
+                  Esta ruta no calcula precio en la app. No comprometas cifras con el cliente.
+                </p>
+              )
             )}
           </div>
         )}

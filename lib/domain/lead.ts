@@ -150,6 +150,9 @@ const base = z.object({
   checklist: z.record(z.string(), z.unknown()).default({}),
   arbol: z.record(z.string(), z.string()).default({}),
   procesos: z.array(z.enum(PROCESOS)).default([]),
+  /** RUTA 7 · ¿quiere recibir el dossier de inversión? Solo tiene sentido en
+   *  rutas de inversor; en el resto el servidor lo fuerza a false. */
+  quiereInfoInversores: z.boolean().default(false),
 });
 
 export const contactoSchema = base.pick({

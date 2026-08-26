@@ -23,6 +23,8 @@ export type FilaLead = {
   enlaceOportunidad: string | null;
   /** Id del documento ya generado, si lo hay. Null = todavía no tiene. */
   documentoId: string | null;
+  /** RUTA 7. Un inversor no lleva propuesta: no se le ofrece generarla. */
+  esInversor: boolean;
 };
 
 type Estado = { etiqueta: string; bloqueo: boolean };
@@ -226,8 +228,11 @@ function Ficha({
   const estado = estadoDe(lead.resultado);
 
   // Solo un lead cerrado como 'creado' tiene alcance que documentar: el
-  // endpoint rechaza el resto con un 409, así que no se ofrece el botón.
-  const ofrecerPropuesta = puedeDocumentos && lead.resultado === "creado";
+  // endpoint rechaza el resto con un 409, así que no se ofrece el botón. Los
+  // inversores también quedan fuera: reciben información de inversión, no
+  // presupuesto, y el mismo endpoint los rechaza igual.
+  const ofrecerPropuesta =
+    puedeDocumentos && lead.resultado === "creado" && !lead.esInversor;
 
   return (
     <div
@@ -273,6 +278,9 @@ function Ficha({
               titulo="Propuesta"
               valor={lead.documentoId ? "Generada" : "Todavía sin generar"}
             />
+          )}
+          {lead.esInversor && (
+            <Dato titulo="Propuesta" valor="No aplica · oportunidad de inversión" />
           )}
         </dl>
 

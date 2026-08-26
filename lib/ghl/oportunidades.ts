@@ -17,6 +17,7 @@ import {
   type CriterioBant,
   type RespuestasBant,
 } from "@/lib/domain/bant";
+import { etiquetaInfoInversores } from "@/lib/domain/visibilidad";
 import {
   ETIQUETA_SERVICIO,
   ETIQUETA_MODALIDAD,
@@ -44,6 +45,8 @@ export type DatosOportunidad = {
   uuid: string;
   faseId?: string;
   estadoPresupuesto?: EstadoPresupuesto;
+  /** RUTA 7. `undefined` en el resto de rutas: el campo no se escribe. */
+  infoInversores?: boolean;
 };
 
 /**
@@ -111,8 +114,12 @@ export async function crearOportunidad(d: DatosOportunidad, contactoId: string) 
         ...campo(CAMPO_OPORTUNIDAD.pain_declarado, d.pain),
         ...campoMulti(CAMPO_OPORTUNIDAD.procesos_criticos, d.procesos),
         ...campo(CAMPO_OPORTUNIDAD.ruta, d.ruta),
-        ...campo(CAMPO_OPORTUNIDAD.pain_declarado, d.pain),
-        ...campoMulti(CAMPO_OPORTUNIDAD.procesos_criticos, d.procesos),
+        // Sí/No explícito, no «Sí o nada»: la automatización filtra por
+        // igualdad y un campo vacío no se distingue de un lead antiguo.
+        ...campo(
+          CAMPO_OPORTUNIDAD.info_inversores,
+          d.infoInversores === undefined ? undefined : etiquetaInfoInversores(d.infoInversores),
+        ),
         ...campo(
           CAMPO_OPORTUNIDAD.servicio,
           d.servicio ? ETIQUETA_SERVICIO[d.servicio] : undefined,

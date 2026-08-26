@@ -103,6 +103,15 @@ export const CAMPO_OPORTUNIDAD = {
   estado_presupuesto: "SAunyT1dHD1wtDJAEEM3",
   uuid_app_comercial: "GjSIMg4hDstajhjctMWI",
   tipologia_servicio: "NrGxhrkhex28tsxIgBUw",
+  /**
+   * RUTA 7 · «Información inversores solicitada». Radio Sí/No en GHL.
+   *
+   * PENDIENTE: crear el campo en la sub-cuenta y pegar aquí su id. Mientras
+   * esté vacío la app NO escribe nada —`campo()` descarta los ids vacíos— y
+   * todo lo demás sigue funcionando: el checkbox se guarda en Supabase y la
+   * automatización simplemente no dispara todavía.
+   */
+  info_inversores: "",
 } as const;
 
 export const CAMPO_BANT = {
