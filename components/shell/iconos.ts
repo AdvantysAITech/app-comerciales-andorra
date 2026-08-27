@@ -13,9 +13,12 @@ import {
   Building2,
   TrendingUp,
   Settings,
-  FileText
+  FileText,
+  SquareKanban,
+  Wrench,
 } from "lucide-react";
 import type { ClaveModulo } from "@/lib/modulos";
+import type { ClaveEnlaceExterno } from "@/lib/enlaces-externos";
 
 export const ICONOS: Record<ClaveModulo, LucideIcon> = {
   captacion: UserPlus,
@@ -26,4 +29,14 @@ export const ICONOS: Record<ClaveModulo, LucideIcon> = {
   rentabilidad: TrendingUp,
   admin: Settings,
   documentos: FileText,
+};
+
+/**
+ * Iconos de los accesos externos. Mapa aparte del de modulos porque las claves
+ * son de otro tipo: asi TypeScript obliga a dar icono a cada enlace nuevo y no
+ * deja mezclar una clave de modulo con una de enlace por descuido.
+ */
+export const ICONOS_EXTERNOS: Record<ClaveEnlaceExterno, LucideIcon> = {
+  crm: SquareKanban,
+  soporte: Wrench,
 };

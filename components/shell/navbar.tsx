@@ -6,11 +6,18 @@
  * No consulta permisos: recibe ya filtrados los módulos que este usuario puede ver.
  * Los módulos con `disponible: false` se pintan apagados y no navegan — sirven para
  * mostrar la forma final de la plataforma sin tener que construirlos todos hoy.
+ *
+ * Debajo de los módulos hay un bloque fijo de accesos externos (CRM, Soporte).
+ * Va anclado al pie y no dentro del área con scroll: son los dos enlaces que el
+ * comercial usa a diario y no deben quedar fuera de pantalla cuando la lista de
+ * módulos crezca.
  */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ArrowUpRight } from "lucide-react";
 import { agruparModulos, type Modulo } from "@/lib/modulos";
-import { ICONOS } from "@/components/shell/iconos";
+import { ENLACES_EXTERNOS } from "@/lib/enlaces-externos";
+import { ICONOS, ICONOS_EXTERNOS } from "@/components/shell/iconos";
 import { LogoAdvantys } from "@/components/shell/logo-advantys";
 
 type Props = {
@@ -91,6 +98,38 @@ export function Navbar({ modulos, usuario, className = "flex" }: Props) {
             </ul>
           </div>
         ))}
+      </div>
+
+      {/* Accesos externos. Se abren en pestaña nueva: salen de la aplicación y no
+          deben tirar abajo un formulario de alta a medio rellenar. La flecha
+          diagonal es la señal visual de que el enlace sale fuera. */}
+      <div className="shrink-0 border-t border-linea px-3 py-2">
+        <ul className="space-y-px">
+          {ENLACES_EXTERNOS.map((enlace) => {
+            const Icono = ICONOS_EXTERNOS[enlace.clave];
+            return (
+              <li key={enlace.clave}>
+                <a
+                  href={enlace.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={enlace.descripcion}
+                  className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-tinta-media transition-colors hover:bg-elevado/60 hover:text-tinta"
+                >
+                  <Icono className="size-4 shrink-0" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate">
+                    {enlace.nombre}
+                  </span>
+                  <ArrowUpRight
+                    className="size-3.5 shrink-0 text-tinta-tenue"
+                    aria-hidden
+                  />
+                  <span className="sr-only">(se abre en una pestaña nueva)</span>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
       </div>
 
       {/* El pie ya no lleva "Cerrar sesión": vive en /perfil, junto al resto de
