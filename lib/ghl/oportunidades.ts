@@ -5,6 +5,7 @@ import {
   ASOCIACION_SPINOFF_OPORTUNIDAD,
   CAMPO_BANT,
   CAMPO_OPORTUNIDAD,
+  etiquetaSpinoffGhl,
   pipelineDestino,
   faseInicial,
   faseValida,
@@ -35,6 +36,9 @@ export type DatosOportunidad = {
   rolJV?: RolJV;
   spinoffId?: string;
   spinoffNombre?: string;
+  /** Clave interna (educacion · agro · hospitality · residencia). Es la que
+   *  alimenta el campo «Spin-off» de GHL; el nombre comercial NO vale. */
+  spinoffClave?: string;
   valorEstimado?: number;
   ruta?: string;
   pain?: string;
@@ -47,6 +51,9 @@ export type DatosOportunidad = {
   estadoPresupuesto?: EstadoPresupuesto;
   /** RUTA 7. `undefined` en el resto de rutas: el campo no se escribe. */
   infoInversores?: boolean;
+  /** Id de usuario de GHL que queda como propietario. Sin él, la oportunidad
+   *  se crea sin asignar, igual que hasta ahora. */
+  propietarioId?: string;
 };
 
 /**
@@ -108,9 +115,16 @@ export async function crearOportunidad(d: DatosOportunidad, contactoId: string) 
       status: "open",
       contactId: contactoId,
       monetaryValue: d.valorEstimado ?? 0,
+      // Propietario. Se omite la clave entera si no hay id: mandar
+      // `assignedTo: undefined` es lo mismo, pero mandar "" o null hace que
+      // GHL rechace el POST entero en vez de dejarla sin asignar.
+      ...(d.propietarioId ? { assignedTo: d.propietarioId } : {}),
       customFields: [
         ...campo(CAMPO_OPORTUNIDAD.linea_negocio, ETIQUETA_LINEA[d.linea]),
         ...campo(CAMPO_OPORTUNIDAD.rol_jv, d.rolJV ? ETIQUETA_ROL[d.rolJV] : undefined),
+        // La spin-off, además de la asociación. La asociación vive en su propio
+        // panel y no sirve para filtrar ni disparar workflows; el campo sí.
+        ...campo(CAMPO_OPORTUNIDAD.spinoff, etiquetaSpinoffGhl(d.spinoffClave)),
         ...campo(CAMPO_OPORTUNIDAD.pain_declarado, d.pain),
         ...campoMulti(CAMPO_OPORTUNIDAD.procesos_criticos, d.procesos),
         ...campo(CAMPO_OPORTUNIDAD.ruta, d.ruta),

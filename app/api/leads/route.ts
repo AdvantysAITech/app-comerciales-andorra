@@ -26,6 +26,7 @@ import { calcularPrecio } from "@/lib/precios";
 import { supabaseServer } from "@/lib/supabase/server";
 import { crearNota, upsertContacto } from "@/lib/ghl/contactos";
 import { crearOportunidad, vincularSpinoff } from "@/lib/ghl/oportunidades";
+import { usuarioGhlPorEmail } from "@/lib/ghl/ids";
 
 /** Violación de índice único en Postgres. */
 const CLAVE_DUPLICADA = "23505";
@@ -247,6 +248,12 @@ export async function POST(request: Request) {
         rolJV: definicion.rolJV,
         spinoffId: spinoffGhlId ?? undefined,
         spinoffNombre: spinoffNombre ?? undefined,
+        // La clave interna, no el nombre: es lo unico que casa con las
+        // opciones del campo «Spin-off» de GHL.
+        spinoffClave: lead.spinoffClave ?? undefined,
+        // Propietario segun quien haya iniciado sesion. Si el email no esta
+        // en el mapa, sale undefined y la oportunidad se crea sin asignar.
+        propietarioId: usuarioGhlPorEmail(user.email),
         faseId: lead.faseId,
         valorEstimado: calculo.presentado ?? lead.valorEstimado,
         servicio: definicion.servicio,

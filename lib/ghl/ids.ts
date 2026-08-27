@@ -103,16 +103,67 @@ export const CAMPO_OPORTUNIDAD = {
   estado_presupuesto: "SAunyT1dHD1wtDJAEEM3",
   uuid_app_comercial: "GjSIMg4hDstajhjctMWI",
   tipologia_servicio: "NrGxhrkhex28tsxIgBUw",
-  /**
-   * RUTA 7 · «Información inversores solicitada». Radio Sí/No en GHL.
-   *
-   * PENDIENTE: crear el campo en la sub-cuenta y pegar aquí su id. Mientras
-   * esté vacío la app NO escribe nada —`campo()` descarta los ids vacíos— y
-   * todo lo demás sigue funcionando: el checkbox se guarda en Supabase y la
-   * automatización simplemente no dispara todavía.
-   */
-  info_inversores: "",
+  /** «Spin-off». Se escribe ademas de la asociacion: la asociacion vive en su
+   *  propio panel y no sirve para filtrar ni disparar workflows; el campo si. */
+  spinoff: "amNm6OwfrP6r0mInsd0A",
+  /** «¿Enviar documentación JV?». Radio Sí/No. Hoy solo lo escribe RUTA 7. */
+  info_inversores: "kUSu9kMPU6WNNDiVFNQ6",
+  /** «Documentacion». FILE_UPLOAD — se rellena con la subida multipart, no
+   *  con un valor de texto en el POST de la oportunidad. */
+  documentacion: "8x98MVDlYSPA591T82LR",
 } as const;
+
+/**
+ * Etiquetas del campo «Spin-off» tal y como estan escritas en GHL.
+ *
+ * Se mapea desde la clave interna, NO desde el nombre comercial. En la cache
+ * los nombres son «IA con Criterio», «ROAT», «Residencia Fiscal Soberana» y
+ * «Trazabilidad Industrial», que no coinciden con ninguna opcion del campo:
+ * GHL descartaria el valor en silencio y el campo quedaria vacio.
+ *
+ * Si algun dia cambian las opciones en GHL, este mapa es el unico sitio a
+ * tocar. Las claves internas no cambian nunca.
+ */
+export const ETIQUETA_SPINOFF_GHL: Record<string, string> = {
+  educacion: "Educación",
+  agro: "Agro",
+  hospitality: "Hospitality",
+  residencia: "Residencia",
+};
+
+export const etiquetaSpinoffGhl = (clave: string | null | undefined) =>
+  clave ? ETIQUETA_SPINOFF_GHL[clave] : undefined;
+
+/**
+ * Propietario de la oportunidad: email de la App Comercial -> id de usuario de GHL.
+ *
+ * Va en codigo y no en base de datos porque el equipo son cuatro personas y el
+ * alta de un comercial nuevo ya exige tocar GHL, Supabase y permisos. Si el
+ * equipo crece, esto pasa a una columna `ghl_user_id` en `profiles`.
+ *
+ * Las claves en minusculas: el email de Supabase puede llegar con mayusculas y
+ * `usuarioGhlPorEmail` normaliza antes de buscar.
+ */
+export const USUARIO_GHL: Record<string, string> = {
+  "jacob.ruiz@advantys.ai": "cjMqmLzEhxp5vIwASDSA",
+  "ajsanchez@advantys.ai": "p9OK69Q8S6NiikBxw45d",
+  "alex.ruiz@advantys.ai": "u9sc4RnRFwjzr6ZSrCFf",
+  // PENDIENTE: confirmar el email exacto con el que Samuel entra en la app.
+  // El id de GHL es correcto; lo que falta es la clave con la que se busca.
+  "samuel.ruiz@advantys.ai": "mswBBkGVk1a7lzV6NBnn",
+};
+
+/**
+ * Devuelve el id de GHL del comercial, o undefined si no esta en el mapa.
+ *
+ * Undefined es deliberado: la oportunidad se crea igual, sin propietario. Un
+ * email no reconocido no puede tumbar un alta — se pierde la asignacion, que
+ * se arregla en el CRM en dos clics, no el lead.
+ */
+export function usuarioGhlPorEmail(email: string | null | undefined) {
+  if (!email) return undefined;
+  return USUARIO_GHL[email.trim().toLowerCase()];
+}
 
 export const CAMPO_BANT = {
   budget_tiene: { respuesta: "mprVGYr4LSz5UF1rteIc", puntos: "9JxoK6zt63xmA8gJtd6K" },
