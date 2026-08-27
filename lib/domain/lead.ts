@@ -134,7 +134,12 @@ const base = z.object({
   cargo: z.string().trim().optional(),
   ciudad: z.string().trim().min(2, "Indica la ciudad"),
   pais: z.string().trim().min(2, "Indica el país"),
-  web: z.union([z.string().trim().url("La web tiene que empezar por https://"), z.literal("")]).optional(),
+  web: z
+    .string()
+    .trim()
+    .transform((v) => (v === "" || /^https?:\/\//i.test(v) ? v : `https://${v}`))
+    .pipe(z.union([z.url("Revisa la web"), z.literal("")]))
+    .optional(),
   fuente: z.enum(FUENTES, "Indica de dónde viene el lead"),
   idioma: z.enum(IDIOMAS, "Selecciona el idioma"),
   sector: z.enum(SECTORES, "Selecciona el sector"),

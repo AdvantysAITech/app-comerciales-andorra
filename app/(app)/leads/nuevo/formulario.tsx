@@ -275,7 +275,9 @@ export default function FormularioLead({
     const fallos = validarPaso(desde);
     if (Object.keys(fallos).length > 0) {
       setErrores(fallos);
-      setErrorGeneral("Faltan datos en este paso. Están marcados en rojo.");
+      setErrorGeneral(
+        "Faltan datos en este paso: " + Object.values(fallos).join(" · "),
+      );
       return null;
     }
 
@@ -413,7 +415,9 @@ export default function FormularioLead({
 
         if (destino && destino !== "revision") {
           setPaso(destino);
-          setErrorGeneral("Faltan datos en este paso. Están marcados en rojo.");
+          setErrorGeneral(
+            "Faltan datos en este paso: " + Object.values(fallos).join(" · "),
+          );
         } else {
           setErrorGeneral("Revisa los campos marcados en rojo.");
         }
@@ -508,7 +512,7 @@ export default function FormularioLead({
             <Campo etiqueta="Cargo (opcional)" valor={campos.cargo} onChange={set("cargo")} />
             <Campo etiqueta="Ciudad" valor={campos.ciudad} onChange={set("ciudad")} error={errores.ciudad} />
             <Campo etiqueta="País" valor={campos.pais} onChange={set("pais")} error={errores.pais} />
-            <Campo etiqueta="Web (opcional)" valor={campos.web} onChange={set("web")} marcador="https://" />
+            <Campo etiqueta="Web (opcional)" valor={campos.web} onChange={set("web")} marcador="https://" error={errores.web} />
 
             <Lista id="fuente" etiqueta="Fuente de captación" valor={campos.fuente}
               opciones={FUENTES} etiquetas={ETIQUETA_FUENTE} onChange={set("fuente")} error={errores.fuente} />
