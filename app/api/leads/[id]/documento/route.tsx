@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { sesionActual } from "@/lib/permisos";
 import { construirEntrada, datosCliente } from "@/lib/ia/entrada";
 import { generarAlcance } from "@/lib/ia/generar";
+import { renderizarPdf } from "@/lib/documentos/render";
+import { adjuntarDocumentoOportunidad } from "@/lib/ghl/documentos";
 import { calcularPrecio } from "@/lib/precios";
 import { calcularBant } from "@/lib/domain/bant";
 import type { RespuestasChecklist } from "@/lib/domain/checklists";
@@ -10,6 +13,7 @@ import { SPINOFF } from "@/lib/domain/checklists";
 import type { Ruta } from "@/lib/domain/rutas";
 import { generaPresupuesto } from "@/lib/domain/visibilidad";
 import type { RespuestasBant } from "@/lib/domain/bant";
+import type { Alcance } from "@/lib/ia/salida";
 
 export const runtime = "nodejs";
 
@@ -18,7 +22,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
@@ -30,9 +34,17 @@ export async function POST(
 
   const { data: lead, error: errorLead } = await supabase
     .from("leads")
-    .select("id, comercial_id, empresa, sector, empleados, facturacion, ciudad_pais, ruta, checklist, bant_score, spinoff_clave, spinoff_nombre, resultado")
+    .select("id, comercial_id, empresa, sector, empleados, facturacion, ciudad_pais, ruta, checklist, bant_score, spinoff_clave, spinoff_nombre, resultado, uuid_origen, ghl_oportunidad_id")
     .eq("id", id)
     .maybeSingle();
+
+  if (errorLead) {
+    console.error("[documento] select de lead falló", errorLead);
+    return NextResponse.json(
+      { error: `No se pudo leer el lead: ${JSON.stringify(errorLead)}` },
+      { status: 500 },
+    );
+  }
 
   if (!lead) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
@@ -66,16 +78,6 @@ export async function POST(
     .eq("lead_id", id)
     .maybeSingle();
 
-  if (errorLead) {
-    console.error("[documento] select de lead falló", errorLead);
-    return NextResponse.json(
-      { error: `No se pudo leer el lead: ${JSON.stringify(errorLead)}` },
-      { status: 500 },
-    );
-  }
-
-  if (!lead) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
-  
   if (existente) return NextResponse.json({ documentoId: existente.id, repetido: true });
 
   const ruta = lead.ruta as Ruta;
@@ -148,6 +150,31 @@ export async function POST(
         .eq("id", lead.id);
     }
 
+    /* ---------------------------------------------------------------- */
+    /* PDF: se materializa, se guarda y se sube al CRM                   */
+    /* ---------------------------------------------------------------- */
+
+    /**
+     * Todo este bloque va en su propio try y NUNCA tumba la respuesta.
+     *
+     * El documento ya está generado y guardado: la llamada cara a la IA está
+     * pagada. Si falla el PDF, Storage o GHL, el comercial sigue teniendo su
+     * propuesta —la ruta de descarga la ensambla al vuelo si no hay archivo—
+     * y el fallo queda anotado en la fila para poder rastrearlo. Devolver un
+     * error aquí obligaría a regenerar, y regenerar cuesta 45 segundos y
+     * tokens por un problema que no está en el documento.
+     */
+    await materializarPdf({
+      documentoId: doc.id,
+      alcance: resultado.alcance,
+      ruta,
+      uuid: lead.uuid_origen,
+      empresa: lead.empresa,
+      precio: calculo.presentado,
+      oportunidadId: lead.ghl_oportunidad_id,
+      baseUrl: request.url,
+    });
+
     return NextResponse.json({
       documentoId: doc.id,
       // Solo lo que el comercial puede ver. Ni horas, ni baseline, ni desviación.
@@ -161,5 +188,106 @@ export async function POST(
       { error: `No se pudo generar el documento. ${detalle}` },
       { status: 502 },
     );
+  }
+}
+
+/* ================================================================== */
+
+/**
+ * Ensambla el PDF, lo guarda en Storage y lo adjunta a la oportunidad.
+ *
+ * Se traga sus propios errores por diseño (ver arriba). Lo que no hace es
+ * tragárselos en silencio: cada fallo queda en `documentos.ghl_error` y en el
+ * log del servidor.
+ */
+async function materializarPdf(args: {
+  documentoId: string;
+  alcance: Alcance;
+  ruta: Ruta;
+  uuid: string;
+  empresa: string;
+  precio: number | null;
+  oportunidadId: string | null;
+  baseUrl: string;
+}) {
+  const admin = createAdminClient();
+
+  let pdf: Uint8Array;
+  let nombreArchivo: string;
+
+  try {
+    const render = await renderizarPdf({
+      alcance: args.alcance,
+      ruta: args.ruta,
+      uuid: args.uuid,
+      empresa: args.empresa,
+      precio: args.precio,
+      baseUrl: args.baseUrl,
+    });
+    pdf = render.pdf;
+    nombreArchivo = render.nombreArchivo;
+  } catch (e) {
+    const detalle = e instanceof Error ? e.message : "Error desconocido";
+    console.error("[documento] render del PDF falló", detalle);
+    await admin
+      .from("documentos")
+      .update({ ghl_error: `No se pudo ensamblar el PDF: ${detalle}` })
+      .eq("id", args.documentoId);
+    return;
+  }
+
+  /* --- Storage ------------------------------------------------------ */
+
+  // El id del documento va en la ruta: es único y hace que regenerar (si algún
+  // día se permite) no pise el archivo anterior de otro documento.
+  const rutaStorage = `${args.documentoId}/${nombreArchivo}`;
+
+  const { error: errorSubida } = await admin.storage
+    .from("documentos")
+    .upload(rutaStorage, pdf, { contentType: "application/pdf", upsert: true });
+
+  if (errorSubida) {
+    console.error("[documento] subida a Storage falló", errorSubida);
+    await admin
+      .from("documentos")
+      .update({ ghl_error: `No se pudo guardar el PDF: ${errorSubida.message}` })
+      .eq("id", args.documentoId);
+  } else {
+    await admin
+      .from("documentos")
+      .update({ pdf_ruta: rutaStorage, pdf_generado_en: new Date().toISOString() })
+      .eq("id", args.documentoId);
+  }
+
+  /* --- GHL ---------------------------------------------------------- */
+
+  // Sin oportunidad no hay dónde adjuntar. No es un fallo: el lead pudo
+  // crearse con el contacto y sin oportunidad.
+  if (!args.oportunidadId) {
+    await admin
+      .from("documentos")
+      .update({ ghl_error: "El lead no tiene oportunidad en el Sistema Advantys." })
+      .eq("id", args.documentoId);
+    return;
+  }
+
+  try {
+    await adjuntarDocumentoOportunidad({
+      oportunidadId: args.oportunidadId,
+      pdf,
+      nombreArchivo,
+    });
+
+    await admin
+      .from("documentos")
+      .update({ ghl_subido_en: new Date().toISOString(), ghl_error: null })
+      .eq("id", args.documentoId);
+  } catch (e) {
+    const detalle = e instanceof Error ? e.message : "Error desconocido";
+    console.error("[documento] adjuntar en GHL falló", detalle);
+    await admin
+      .from("documentos")
+      .update({ ghl_error: `No se pudo adjuntar en el CRM: ${detalle}` })
+      .eq("id", args.documentoId);
   }
 }

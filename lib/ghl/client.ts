@@ -82,3 +82,54 @@ export async function ghl<T = unknown>(path: string, opciones: Opciones = {}): P
 
   return payload as T;
 }
+
+/**
+ * Subida multipart. Vía aparte de `ghl()` por dos motivos incompatibles con
+ * ella:
+ *
+ *  - El cuerpo va como FormData, no como JSON. Y NO se pone `Content-Type` a
+ *    mano: `fetch` lo genera con el `boundary` que toca. Si se fija a
+ *    "multipart/form-data" sin boundary, el servidor no sabe partir el cuerpo
+ *    y responde 400 sin explicar por qué.
+ *  - El endpoint de subida a campos personalizados exige `Version: v3`,
+ *    distinta de la 2021-07-28 que usa el resto de la API.
+ */
+export async function ghlSubida<T = unknown>(
+  path: string,
+  formData: FormData,
+  opciones: { version?: string } = {},
+): Promise<T> {
+  const url = new URL(BASE + path);
+
+  const lanzar = () =>
+    fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env("GHL_TOKEN")}`,
+        Version: opciones.version ?? "v3",
+        Accept: "application/json",
+      },
+      body: formData,
+    });
+
+  let res = await lanzar();
+
+  if (res.status === 429) {
+    await new Promise((r) => setTimeout(r, 1200));
+    res = await lanzar();
+  }
+
+  const texto = await res.text();
+  let payload: unknown;
+  try {
+    payload = texto ? JSON.parse(texto) : null;
+  } catch {
+    payload = texto;
+  }
+
+  if (!res.ok) {
+    throw new GhlError(`GHL POST ${path} devolvió ${res.status}`, res.status, payload);
+  }
+
+  return payload as T;
+}
