@@ -34,7 +34,7 @@ export async function POST(
 
   const { data: lead, error: errorLead } = await supabase
     .from("leads")
-    .select("id, comercial_id, empresa, sector, empleados, facturacion, ciudad_pais, ruta, checklist, bant_score, spinoff_clave, spinoff_nombre, resultado, uuid_origen, ghl_oportunidad_id")
+    .select("id, comercial_id, empresa, sector, empleados, facturacion, ciudad, pais, ruta, checklist, bant_score, spinoff_clave, spinoff_nombre, resultado, uuid_origen, ghl_oportunidad_id")
     .eq("id", id)
     .maybeSingle();
 
@@ -103,7 +103,8 @@ export async function POST(
       sector: lead.sector,
       empleados: lead.empleados,
       facturacion: lead.facturacion,
-      ciudadPais: lead.ciudad_pais ?? "",
+      ciudad: lead.ciudad ?? "",
+      pais: lead.pais ?? "",
     }),
     bant,
     calculo,

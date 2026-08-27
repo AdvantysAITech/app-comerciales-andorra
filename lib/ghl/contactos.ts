@@ -50,7 +50,8 @@ export type DatosContacto = {
   telefono: string;
   empresa: string;
   cargo?: string;
-  ciudadPais: string;
+  ciudad: string;
+  pais: string;
   web?: string;
   fuente: string;
   idioma: string;
@@ -76,7 +77,8 @@ export async function upsertContacto(
       phone: d.telefono,
       companyName: d.empresa,
       website: d.web || undefined,
-      city: d.ciudadPais,
+      city: d.ciudad,
+      country: d.pais,
       source: `App Comercial · ${d.fuente}`,
       customFields: [
         ...campo(CAMPO_CONTACTO.cargo, d.cargo),

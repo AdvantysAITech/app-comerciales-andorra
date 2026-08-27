@@ -72,7 +72,8 @@ type Campos = {
   telefono: string;
   empresa: string;
   cargo: string;
-  ciudadPais: string;
+  ciudad: string;
+  pais: string;
   web: string;
   fuente: Fuente | "";
   idioma: Idioma | "";
@@ -85,14 +86,14 @@ type Campos = {
 };
 
 const VACIO: Campos = {
-  nombre: "", email: "", telefono: "", empresa: "", cargo: "", ciudadPais: "",
+  nombre: "", email: "", telefono: "", empresa: "", cargo: "", ciudad: "", pais: "",
   web: "", fuente: "", idioma: "es", sector: "", empleados: "", facturacion: "",
   herramientas: "", valorEstimado: "", notas: "",
 };
 
 const CAMPOS_PASO: Record<string, Paso> = {
   nombre: "contacto", email: "contacto", telefono: "contacto",
-  empresa: "contacto", cargo: "contacto", ciudadPais: "contacto",
+  empresa: "contacto", cargo: "contacto", ciudad: "contacto", pais: "contacto",
   web: "contacto", fuente: "contacto", idioma: "contacto",
   sector: "contacto", empleados: "contacto", facturacion: "contacto",
   herramientas: "contacto",
@@ -505,7 +506,8 @@ export default function FormularioLead({
             <Campo etiqueta="Email" tipo="email" valor={campos.email} onChange={set("email")} onBlur={comprobarContacto} error={errores.email} />
             <Campo etiqueta="Teléfono" valor={campos.telefono} onChange={set("telefono")} onBlur={comprobarContacto} error={errores.telefono} marcador="+376 ..." />
             <Campo etiqueta="Cargo (opcional)" valor={campos.cargo} onChange={set("cargo")} />
-            <Campo etiqueta="Ciudad y país" valor={campos.ciudadPais} onChange={set("ciudadPais")} error={errores.ciudadPais} />
+            <Campo etiqueta="Ciudad" valor={campos.ciudad} onChange={set("ciudad")} error={errores.ciudad} />
+            <Campo etiqueta="País" valor={campos.pais} onChange={set("pais")} error={errores.pais} />
             <Campo etiqueta="Web (opcional)" valor={campos.web} onChange={set("web")} marcador="https://" />
 
             <Lista id="fuente" etiqueta="Fuente de captación" valor={campos.fuente}

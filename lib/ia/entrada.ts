@@ -29,7 +29,8 @@ export type DatosCliente = {
   sector: string;
   empleados: string;
   facturacion: string;
-  ciudadPais: string;
+  ciudad: string;
+  pais: string;
 };
 
 export type ProyectoReferencia = {
@@ -150,13 +151,15 @@ export function datosCliente(lead: {
   sector: keyof typeof ETIQUETA_SECTOR;
   empleados: keyof typeof ETIQUETA_EMPLEADOS;
   facturacion: keyof typeof ETIQUETA_FACTURACION;
-  ciudadPais: string;
+  ciudad: string;
+  pais: string;
 }): DatosCliente {
   return {
     empresa: lead.empresa,
     sector: ETIQUETA_SECTOR[lead.sector],
     empleados: ETIQUETA_EMPLEADOS[lead.empleados],
     facturacion: ETIQUETA_FACTURACION[lead.facturacion],
-    ciudadPais: lead.ciudadPais,
+    ciudad: lead.ciudad,
+    pais: lead.pais,
   };
 }

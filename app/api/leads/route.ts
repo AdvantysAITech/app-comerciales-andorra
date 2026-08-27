@@ -154,7 +154,8 @@ export async function POST(request: Request) {
     sector: lead.sector,
     empleados: lead.empleados,
     facturacion: lead.facturacion,
-    ciudad_pais: lead.ciudadPais,
+    ciudad: lead.ciudad,
+    pais: lead.pais,
   };
 
   /* ---------------------------------------------------------------- */
@@ -231,7 +232,8 @@ export async function POST(request: Request) {
       telefono: lead.telefono,
       empresa: lead.empresa,
       cargo: lead.cargo,
-      ciudadPais: lead.ciudadPais,
+      ciudad: lead.ciudad,
+      pais: lead.pais,
       web: lead.web,
       fuente: ETIQUETA_FUENTE[lead.fuente],
       idioma: ETIQUETA_IDIOMA[lead.idioma],
