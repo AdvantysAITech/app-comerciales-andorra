@@ -78,7 +78,7 @@ export async function upsertContacto(
       companyName: d.empresa,
       website: d.web || undefined,
       city: d.ciudad,
-      country: d.pais,
+      country: /^[A-Za-z]{2}$/.test(d.pais) ? d.pais.toUpperCase() : undefined,
       source: `App Comercial · ${d.fuente}`,
       customFields: [
         ...campo(CAMPO_CONTACTO.cargo, d.cargo),

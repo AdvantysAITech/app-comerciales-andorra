@@ -27,6 +27,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { crearNota, upsertContacto } from "@/lib/ghl/contactos";
 import { crearOportunidad, vincularSpinoff } from "@/lib/ghl/oportunidades";
 import { usuarioGhlPorEmail } from "@/lib/ghl/ids";
+import { GhlError } from "@/lib/ghl/client";
 
 /** Violación de índice único en Postgres. */
 const CLAVE_DUPLICADA = "23505";
@@ -319,9 +320,19 @@ export async function POST(request: Request) {
       estado: calculo.estado,
       avisos: calculo.avisos,
     });
-  } catch (error) {
-    const detalle = error instanceof Error ? error.message : "Error desconocido";
+  }catch (error) {
+    const detalle =
+      error instanceof GhlError
+        ? `${error.message} · ${JSON.stringify(error.body)}`
+        : error instanceof Error
+          ? error.message
+          : "Error desconocido";
+    // Sin esto, un rechazo de GHL no deja rastro en el log del servidor.
+    console.error("[leads] escritura en GHL falló", { uuid: lead.uuid, detalle });
     await cerrar("error", { detalle });
-    return NextResponse.json({ error: `No se pudo guardar en GHL. ${detalle}` }, { status: 502 });
+    return NextResponse.json(
+      { error: "No se pudo guardar en GHL. Revisa el detalle del lead." },
+      { status: 502 },
+    );
   }
 }
