@@ -82,11 +82,37 @@ export default async function DocumentoInterno({
               </tr>
             ))}
             <tr className="border-t-2 border-line font-medium">
-              <td className="py-2">Presentado al cliente</td>
+              <td className="py-2">Calculado por el motor</td>
               <td className="py-2 text-right tabular-nums">
                 {lead.precio_presentado === null ? "—" : euros(lead.precio_presentado)}
               </td>
             </tr>
+            {/* El precio editado a mano es libre y no se bloquea (decisión de
+                Jacob, 04/09/2026). Que aparezca aquí, junto al calculado, es
+                lo único que convierte «sin límite» en «sin límite y a la
+                vista»: sin esta fila, un descuento del 40 % sería invisible
+                en la única pantalla que se revisa. */}
+            {doc.precio_editado !== null && doc.precio_editado !== undefined && (
+              <tr className="border-t border-line font-medium">
+                <td className="py-2">
+                  Modificado a mano
+                  {lead.precio_presentado ? (
+                    <span className="text-tinta-media">
+                      {" "}
+                      ·{" "}
+                      {doc.precio_editado > lead.precio_presentado ? "+" : ""}
+                      {Math.round(
+                        ((doc.precio_editado - lead.precio_presentado) /
+                          lead.precio_presentado) *
+                          100,
+                      )}
+                      %
+                    </span>
+                  ) : null}
+                </td>
+                <td className="py-2 text-right tabular-nums">{euros(doc.precio_editado)}</td>
+              </tr>
+            )}
             <tr className="border-t border-line text-tinta-media">
               <td className="py-2">No bajes de</td>
               <td className="py-2 text-right tabular-nums">

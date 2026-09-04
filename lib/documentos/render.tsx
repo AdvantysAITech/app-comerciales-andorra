@@ -6,6 +6,7 @@ import { cargarPiezas } from "@/lib/documentos/estaticos";
 import { ensamblarDocumento } from "@/lib/documentos/ensamblar";
 import type { Alcance } from "@/lib/ia/salida";
 import type { Ruta } from "@/lib/domain/rutas";
+import type { EdicionDocumento } from "@/lib/documentos/edicion";
 
 /**
  * Ensamblado del PDF, extraído de la ruta de descarga.
@@ -27,6 +28,10 @@ export async function renderizarPdf(args: {
   uuid: string;
   empresa: string;
   precio: number | null;
+  /** Modificaciones hechas a mano sobre la propuesta, si las hay. Sin esto el
+   *  PDF saldría con el texto original mientras la pantalla muestra el
+   *  editado, que es justo lo que no puede pasar. */
+  edicion?: EdicionDocumento | null;
   /** URL absoluta de la app. En una ruta, `request.url` vale. */
   baseUrl: string;
 }): Promise<{ pdf: Uint8Array; nombreArchivo: string; referencia: string }> {
@@ -36,6 +41,7 @@ export async function renderizarPdf(args: {
     uuid: args.uuid,
     empresa: args.empresa,
     precio: args.precio,
+    edicion: args.edicion,
   });
 
   const logo = new URL("/logo-advantys.png", args.baseUrl).toString();

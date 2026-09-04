@@ -3,8 +3,8 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { construirDocumentoCliente } from "@/lib/documentos/cliente";
 import type { Alcance } from "@/lib/ia/salida";
 import type { Ruta } from "@/lib/domain/rutas";
-import Plantilla from "./plantilla";
-import BotonDescargar from "./boton-imprimir";
+import type { EdicionDocumento } from "@/lib/documentos/edicion";
+import Acciones from "./acciones";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +58,10 @@ export default async function VerDocumento({
   // existe o no es suya: en ambos casos 404, y sin dar pistas de cuál de las dos.
   const { data: doc } = await supabase
     .from("documentos")
-    .select("id, alcance, validado_en, lead_id")
+    // Literal de una pieza a propósito: si se parte en dos y se concatena,
+    // supabase-js deja de inferir el tipo de la fila y `doc` vuelve como
+    // GenericStringError.
+    .select("id, alcance, validado_en, lead_id, comercial_id, edicion, precio_editado, editado_en, ediciones, ghl_subido_en, ghl_error")
     .eq("id", id)
     .maybeSingle();
 
@@ -72,13 +75,42 @@ export default async function VerDocumento({
 
   if (!lead) notFound();
 
+  // `precio_editado` manda sobre el calculado. Null no significa «gratis»:
+  // significa «no se ha tocado», y entonces vale el del motor —que en Ruta 4
+  // ya es null de origen y hace que el documento diga que el presupuesto lo
+  // elabora el equipo técnico.
+  const precioEfectivo = doc.precio_editado ?? lead.precio_presentado;
+
   const documento = construirDocumentoCliente({
     alcance: doc.alcance as Alcance,
     ruta: lead.ruta as Ruta,
     uuid: lead.uuid_origen,
     empresa: lead.empresa,
-    precio: lead.precio_presentado,
+    precio: precioEfectivo,
+    edicion: doc.edicion as EdicionDocumento | null,
   });
+
+  /**
+   * Quién puede editar. La condición es la misma que la de la política
+   * `documentos_update`, a propósito: quien puede leer la propuesta puede
+   * modificarla. Cada comercial la suya; con alcance equipo o total,
+   * cualquiera.
+   *
+   * Esto decide si se PINTA el botón. Quien decide de verdad es la RLS: la
+   * ruta de guardado hace el UPDATE con el cliente del usuario y devuelve 403
+   * si no vuelve ninguna fila. Ocultar el botón es comodidad, no seguridad.
+   */
+  const { data: permiso } = await supabase
+    .from("permisos")
+    .select("alcance")
+    .eq("profile_id", user.id)
+    .eq("modulo_clave", "captacion")
+    .maybeSingle();
+
+  const puedeEditar =
+    doc.comercial_id === user.id ||
+    permiso?.alcance === "equipo" ||
+    permiso?.alcance === "total";
 
   /**
    * La validación ya NO bloquea la descarga (decisión de Jacob, 24/08/2026,
@@ -92,27 +124,15 @@ export default async function VerDocumento({
   const validado = Boolean(doc.validado_en);
 
   return (
-    <>
-      <div className="no-imprimir mx-auto flex max-w-[19cm] flex-wrap items-center justify-between gap-3 px-6 py-4">
-        <p className="traza">
-          {documento.referencia}
-          {!validado && (
-            <span className="text-block"> · pendiente de validación</span>
-          )}
-        </p>
-        <BotonDescargar id={id} />
-      </div>
-
-      {!validado && (
-        <div className="no-imprimir mx-auto max-w-[19cm] px-6 pb-4">
-          <p className="border-l-2 border-block bg-elevado px-4 py-3 text-sm">
-            Esta propuesta todavía no la ha revisado Jacob. Puedes descargarla,
-            pero repásala antes de enviársela al cliente.
-          </p>
-        </div>
-      )}
-
-      <Plantilla doc={documento} />
-    </>
+    <Acciones
+      id={id}
+      doc={documento}
+      precioCalculado={lead.precio_presentado}
+      puedeEditar={puedeEditar}
+      validado={validado}
+      editadoEn={doc.editado_en}
+      ediciones={doc.ediciones ?? 0}
+      crm={{ subidoEn: doc.ghl_subido_en, error: doc.ghl_error }}
+    />
   );
 }
