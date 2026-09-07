@@ -1,10 +1,13 @@
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { sesionActual } from "@/lib/permisos";
+import { versionDe, versionValidada, validadoAntes } from "@/lib/documentos/version";
 import { DEFINICION_RUTA, type Ruta } from "@/lib/domain/rutas";
 import type { Alcance } from "@/lib/ia/salida";
 import BotonValidar from "./boton-validar";
+
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +48,17 @@ export default async function DocumentoInterno({
     .maybeSingle();
   if (!lead) notFound();
 
+  /* ------------------------------------------------------------------ */
+  /* Estado de validación                                                */
+  /* ------------------------------------------------------------------ */
+
+  // NUNCA `Boolean(doc.validado_en)`: eso responde «¿se validó alguna vez?»,
+  // que desde el 07/09/2026 no es la pregunta. Lo que se valida es una
+  // versión, y aquí interesa la que se está mirando.
+  const version = versionDe(doc.ediciones);
+  const validada = versionValidada(doc);
+  const caducada = validadoAntes(doc);
+
   const alcance = doc.alcance as Alcance;
   const desglose = (lead.precio_desglose ?? []) as { concepto: string; importe: number }[];
   const motivos = (lead.motivos_revision ?? []) as string[];
@@ -56,6 +70,13 @@ export default async function DocumentoInterno({
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
+      <Link
+        href="/documentos"
+        className="traza mb-6 inline-flex items-center gap-1.5 transition-colors hover:text-tinta"
+      >
+        <ArrowLeft className="size-3.5" aria-hidden />
+        Documentos
+      </Link>
       <p className="traza">Documento interno · no se entrega al cliente</p>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">{lead.empresa}</h1>
       <p className="mt-1 text-sm text-tinta-media">
@@ -82,11 +103,37 @@ export default async function DocumentoInterno({
               </tr>
             ))}
             <tr className="border-t-2 border-line font-medium">
-              <td className="py-2">Presentado al cliente</td>
+              <td className="py-2">Calculado por el motor</td>
               <td className="py-2 text-right tabular-nums">
                 {lead.precio_presentado === null ? "—" : euros(lead.precio_presentado)}
               </td>
             </tr>
+            {/* El precio editado a mano es libre y no se bloquea (decisión de
+                Jacob, 04/09/2026). Que aparezca aquí, junto al calculado, es
+                lo único que convierte «sin límite» en «sin límite y a la
+                vista»: sin esta fila, un descuento del 40 % sería invisible
+                en la única pantalla que se revisa. */}
+            {doc.precio_editado !== null && doc.precio_editado !== undefined && (
+              <tr className="border-t border-line font-medium">
+                <td className="py-2">
+                  Modificado a mano
+                  {lead.precio_presentado ? (
+                    <span className="text-tinta-media">
+                      {" "}
+                      ·{" "}
+                      {doc.precio_editado > lead.precio_presentado ? "+" : ""}
+                      {Math.round(
+                        ((doc.precio_editado - lead.precio_presentado) /
+                          lead.precio_presentado) *
+                          100,
+                      )}
+                      %
+                    </span>
+                  ) : null}
+                </td>
+                <td className="py-2 text-right tabular-nums">{euros(doc.precio_editado)}</td>
+              </tr>
+            )}
             <tr className="border-t border-line text-tinta-media">
               <td className="py-2">No bajes de</td>
               <td className="py-2 text-right tabular-nums">
@@ -146,20 +193,33 @@ export default async function DocumentoInterno({
         Generado con {doc.modelo}, prompt {doc.version_prompt} · confianza {alcance.confianza}
       </p>
 
-      <div className="mt-10 flex flex-wrap items-center gap-4 border-t border-line pt-6">
-        {doc.validado_en ? (
-          <>
-            <p className="text-sm text-tinta-media">
-              Validado el{" "}
-              {new Date(doc.validado_en).toLocaleString("es-ES", { dateStyle: "long" })}
-            </p>
-            <Link href={`/documentos/${id}`} className="boton-fantasma">
-              Ver el documento del cliente
-            </Link>
-          </>
-        ) : (
-          <BotonValidar id={id} />
+      {/* --------------------------------------------------------------- */}
+      {/* Acciones                                                         */}
+      {/* --------------------------------------------------------------- */}
+
+      {/* El enlace a la propuesta va SIEMPRE, valga o no valga la versión.
+          Antes solo aparecía después de validar, así que revisar una
+          propuesta y decidir que hay que corregirla dejaba sin salida: la
+          única forma de llegar a «Modificar propuesta» era editar la URL a
+          mano. Revisar y corregir son la misma tarea; no puede haber un
+          camino de ida sin vuelta entre las dos. */}
+      <div className="mt-10 space-y-4 border-t border-line pt-6">
+        {doc.validado_en && (
+          <p className="text-sm text-tinta-media">
+            {caducada
+              ? `Se validó la v${doc.validado_version} el ` +
+                `${new Date(doc.validado_en).toLocaleString("es-ES", { dateStyle: "long" })}, ` +
+                `y después se modificó. Esto es la v${version}, y está sin validar.`
+              : `Validado el ${new Date(doc.validado_en).toLocaleString("es-ES", { dateStyle: "long" })}`}
+          </p>
         )}
+
+        <div className="flex flex-wrap items-center gap-4">
+          <Link href={`/documentos/${id}`} className="boton-fantasma">
+            Ver y modificar la propuesta
+          </Link>
+          {!validada && <BotonValidar id={id} />}
+        </div>
       </div>
     </div>
   );

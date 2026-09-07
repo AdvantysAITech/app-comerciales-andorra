@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { sesionActual, puedeVer } from "@/lib/permisos";
 import { DEFINICION_RUTA, type Ruta } from "@/lib/domain/rutas";
+import { versionValidada } from "@/lib/documentos/version";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,8 @@ type Fila = {
   id: string;
   creado_en: string;
   validado_en: string | null;
+  validado_version: number | null;
+  ediciones: number | null;
   lead_id: string;
   leads: { empresa: string; ruta: Ruta; precio_presentado: number | null } | null;
 };
@@ -27,7 +30,9 @@ export default async function Documentos() {
   // intención se lea en el código y no dependa solo de la política.
   let consulta = supabase
     .from("documentos")
-    .select("id, creado_en, validado_en, lead_id, leads(empresa, ruta, precio_presentado)")
+    .select(
+      "id, creado_en, validado_en, validado_version, ediciones, lead_id, leads(empresa, ruta, precio_presentado)",
+    )
     .order("creado_en", { ascending: false })
     .limit(50);
 
@@ -38,8 +43,13 @@ export default async function Documentos() {
 
   // Los pendientes primero: para Jacob son su bandeja de entrada, y para el
   // comercial son lo que está esperando.
-  const pendientes = filas.filter((f) => !f.validado_en);
-  const validados = filas.filter((f) => f.validado_en);
+  //
+  // Se agrupa por VERSIÓN validada, no por `validado_en`. Con `validado_en` a
+  // secas, una propuesta que se validó y después se modificó caía en
+  // «Validados» y desaparecía de la bandeja: exactamente el caso que hay que
+  // revisar. Es el mismo error que tenía la ficha interna.
+  const pendientes = filas.filter((f) => !versionValidada(f));
+  const validados = filas.filter((f) => versionValidada(f));
 
   return (
     <div>
@@ -101,8 +111,10 @@ function Grupo({
                   </span>
                 </span>
                 <span className="shrink-0 text-right">
-                  {!d.validado_en && (
-                    <span className="traza block text-block">Sin validar</span>
+                  {!versionValidada(d) && (
+                    <span className="traza block text-block">
+                      {d.validado_en ? "Modificada tras validar" : "Sin validar"}
+                    </span>
                   )}
                   <span className="traza block">
                     {fecha.toLocaleDateString("es-ES", {

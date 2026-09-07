@@ -1,7 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const RUTAS_AUTOGESTIONADAS = ["/api/ghl/spinoffs/sync"];
+// Rutas que se autentican solas: el cron de Vercel llega sin cookie de
+// sesión, y sin esto el middleware lo redirigiría al login.
+const RUTAS_AUTOGESTIONADAS = ["/api/ghl/spinoffs/sync", "/api/leads/sincronizar-crm"];
 
 export async function middleware(request: NextRequest) {
   const ruta = request.nextUrl.pathname;

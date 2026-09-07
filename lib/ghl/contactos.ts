@@ -44,27 +44,55 @@ export async function buscarContacto(params: {
   return data.contacts?.[0] ?? null;
 }
 
+/**
+ * Lo obligatorio es lo que abre la ficha: nombre, email, teléfono y empresa.
+ * El resto es opcional desde el 07/09/2026, porque el alta dejó de pedirlo y
+ * se completa después en el Sistema Advantys.
+ *
+ * `campo()` ya descarta lo vacío, así que un contacto incompleto no manda
+ * campos en blanco: simplemente no los manda, y GHL conserva lo que hubiera
+ * si el contacto ya existía. Eso importa: un alta rápida no puede borrar
+ * datos que alguien rellenó a mano.
+ */
 export type DatosContacto = {
   nombre: string;
   email: string;
   telefono: string;
   empresa: string;
   cargo?: string;
-  ciudad: string;
-  pais: string;
+  ciudad?: string;
+  /** ISO-3166-1 alfa-2. Ver `paisIso()`: cualquier otra cosa se descarta. */
+  pais?: string;
   web?: string;
-  fuente: string;
-  idioma: string;
-  sector: string;
-  empleados: string;
-  facturacion: string;
+  fuente?: string;
+  idioma?: string;
+  sector?: string;
+  empleados?: string;
+  facturacion?: string;
   herramientas?: string;
 };
+
+/**
+ * `country` en GoHighLevel solo entiende ISO-3166-1 alfa-2. Lo que no lo sea
+ * lo descarta SIN error, así que un «España» escrito a mano no llega nunca y
+ * el contacto acaba con el país por defecto de la location.
+ *
+ * No se adivina el código a partir del nombre: adivinar es exactamente lo que
+ * hace GHL, y es de donde viene el problema. Si el dato no sirve, se anota en
+ * el log y se trata como si no viniera.
+ */
+function paisIso(pais: string | undefined): string | undefined {
+  if (!pais) return undefined;
+  if (/^[A-Za-z]{2}$/.test(pais)) return pais.toUpperCase();
+  console.warn(`[ghl] país descartado por no ser ISO-2: ${pais}`);
+  return undefined;
+}
 
 export async function upsertContacto(
   d: DatosContacto,
 ): Promise<{ id: string; nuevo: boolean }> {
   const { firstName, lastName } = partirNombre(d.nombre);
+  const pais = paisIso(d.pais);
 
   const res = await ghl<{ contact?: { id: string }; new?: boolean }>("/contacts/upsert", {
     method: "POST",
@@ -77,9 +105,11 @@ export async function upsertContacto(
       phone: d.telefono,
       companyName: d.empresa,
       website: d.web || undefined,
-      city: d.ciudad,
-      country: /^[A-Za-z]{2}$/.test(d.pais) ? d.pais.toUpperCase() : undefined,
-      source: `App Comercial · ${d.fuente}`,
+      city: d.ciudad || undefined,
+      country: pais,
+      // Sin fuente, «App Comercial» a secas. Antes salía «App Comercial ·
+      // undefined» en cuanto el campo faltaba.
+      source: d.fuente ? `App Comercial · ${d.fuente}` : "App Comercial",
       customFields: [
         ...campo(CAMPO_CONTACTO.cargo, d.cargo),
         ...campo(CAMPO_CONTACTO.web_empresa, d.web),
@@ -94,7 +124,31 @@ export async function upsertContacto(
   });
 
   if (!res.contact?.id) throw new Error("GHL no devolvió el id del contacto");
-  return { id: res.contact.id, nuevo: res.new === true };
+  const nuevo = res.new === true;
+
+  /**
+   * GHL rellena `country` con el país de la location —Andorra— cuando el
+   * upsert no lo trae. Como el alta no pregunta el país y este se completa a
+   * mano después en el Sistema Advantys, ese valor por defecto no es un dato
+   * incompleto: es un dato falso que nadie va a corregir, porque parece
+   * correcto. Un campo vacío sí se ve y sí se rellena.
+   *
+   * Solo en contactos NUEVOS. Sobre uno que ya existía, mandar "" borraría el
+   * país que alguien puso a mano, y un alta duplicada no puede deshacer
+   * trabajo hecho en el CRM — es la misma regla que sigue `campo()`.
+   */
+  if (nuevo && !pais) {
+    try {
+      await ghl(`/contacts/${res.contact.id}`, { method: "PUT", body: { country: "" } });
+    } catch (e) {
+      // No es motivo para tumbar el alta: el contacto está creado y el resto
+      // de los datos son correctos. Se queda el país por defecto, que es el
+      // comportamiento que había hasta ahora.
+      console.warn("[ghl] no se pudo vaciar el país del contacto nuevo", e);
+    }
+  }
+
+  return { id: res.contact.id, nuevo };
 }
 
 export async function crearNota(contactoId: string, body: string) {

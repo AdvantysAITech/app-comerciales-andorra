@@ -3,6 +3,10 @@
     {
       "path": "/api/ghl/spinoffs/sync",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/leads/sincronizar-crm",
+      "schedule": "0 4 * * *"
     }
   ]
 }

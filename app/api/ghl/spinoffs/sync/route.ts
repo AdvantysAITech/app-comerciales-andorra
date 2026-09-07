@@ -21,5 +21,14 @@ export async function POST(request: Request) {
   }
 }
 
-// El cron de Vercel dispara con GET.
-export const GET = POST;
+/**
+ * El cron de Vercel dispara con GET.
+ *
+ * Mismo motivo que en `/api/leads/sincronizar-crm`: con `export const GET =
+ * POST` Next 16 no registra el método y la ruta contesta 405. Esta ruta lo
+ * tuvo así desde el principio, así que el refresco diario de la caché de
+ * spin-offs no llegó a ejecutarse nunca.
+ */
+export async function GET(request: Request) {
+  return POST(request);
+}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { renderizarPdf, nombreDeArchivo } from "@/lib/documentos/render";
+import type { EdicionDocumento } from "@/lib/documentos/edicion";
 import type { Alcance } from "@/lib/ia/salida";
 import type { Ruta } from "@/lib/domain/rutas";
 
@@ -34,7 +35,7 @@ export async function GET(
    */
   const { data: doc } = await supabase
     .from("documentos")
-    .select("alcance, lead_id, pdf_ruta")
+    .select("alcance, lead_id, pdf_ruta, edicion, precio_editado")
     .eq("id", id)
     .maybeSingle();
 
@@ -89,12 +90,23 @@ export async function GET(
   /* 2. Sin archivo: se ensambla al vuelo                              */
   /* ---------------------------------------------------------------- */
 
+  /**
+   * Se aplica la capa de edición también aquí.
+   *
+   * Este camino solo se recorre cuando no hay archivo guardado —recién
+   * generado, o el PDF se perdió, o la regeneración tras una edición falló—,
+   * pero es justo cuando más importa: sin `edicion` y `precio_editado` la
+   * descarga devolvería el texto y el precio originales mientras la pantalla
+   * muestra los corregidos, y nadie se enteraría hasta que el cliente lo
+   * tuviera en su correo.
+   */
   const { pdf, nombreArchivo } = await renderizarPdf({
     alcance: doc.alcance as Alcance,
     ruta: lead.ruta as Ruta,
     uuid: lead.uuid_origen,
     empresa: lead.empresa,
-    precio: lead.precio_presentado,
+    precio: doc.precio_editado ?? lead.precio_presentado,
+    edicion: doc.edicion as EdicionDocumento | null,
     baseUrl: request.url,
   });
 

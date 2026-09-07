@@ -236,11 +236,15 @@ export async function POST(request: Request) {
       ciudad: lead.ciudad,
       pais: lead.pais,
       web: lead.web,
-      fuente: ETIQUETA_FUENTE[lead.fuente],
-      idioma: ETIQUETA_IDIOMA[lead.idioma],
-      sector: ETIQUETA_SECTOR[lead.sector],
-      empleados: ETIQUETA_EMPLEADOS[lead.empleados],
-      facturacion: ETIQUETA_FACTURACION[lead.facturacion],
+      // Todos opcionales desde el 07/09/2026. Se traduce solo lo que venga:
+      // indexar con undefined revienta, y mandar la cadena "undefined" a GHL
+      // sería peor, porque el campo es un desplegable y GHL descarta en
+      // silencio cualquier etiqueta que no reconozca.
+      fuente: lead.fuente ? ETIQUETA_FUENTE[lead.fuente] : undefined,
+      idioma: lead.idioma ? ETIQUETA_IDIOMA[lead.idioma] : undefined,
+      sector: lead.sector ? ETIQUETA_SECTOR[lead.sector] : undefined,
+      empleados: lead.empleados ? ETIQUETA_EMPLEADOS[lead.empleados] : undefined,
+      facturacion: lead.facturacion ? ETIQUETA_FACTURACION[lead.facturacion] : undefined,
       herramientas: lead.herramientas,
     });
 
@@ -310,6 +314,12 @@ export async function POST(request: Request) {
       ghl_oportunidad_id: oportunidad.id,
       contacto_existia: !contacto.nuevo,
     });
+
+    // El borrador ya cumplió: el lead existe. Se borra por `uuid`, que es el
+    // mismo que generó el formulario, así que no hace falta arrastrar ningún
+    // identificador extra en el cuerpo del POST. Si no había borrador —el
+    // caso normal, un alta de una sentada— esto no afecta a ninguna fila.
+    await supabase.from("leads_borrador").delete().eq("uuid", lead.uuid);
 
     return NextResponse.json({
       contactoId: contacto.id,
