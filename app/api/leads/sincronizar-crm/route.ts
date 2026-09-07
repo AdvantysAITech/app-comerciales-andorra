@@ -11,7 +11,7 @@
  */
 import { NextResponse } from "next/server";
 import { sincronizarLeadsConCrm } from "@/lib/leads/sincronizar-crm";
-import { getUsuarioSesion } from "@/lib/supabase/route-auth";
+import { sesionActual } from "@/lib/permisos";
 
 export const runtime = "nodejs";
 
@@ -23,8 +23,19 @@ export async function POST(request: Request) {
   const esCron =
     request.headers.get("authorization") === `Bearer ${process.env.CRON_SECRET}`;
 
-  if (!esCron && !(await getUsuarioSesion())) {
-    return NextResponse.json({ error: "Sesión caducada" }, { status: 401 });
+  if (!esCron) {
+    // A mano solo con alcance sobre los leads de otros: la comprobación
+    // recorre la tabla entera y marca lo de todo el equipo. El botón ya se
+    // esconde, pero esconder no es proteger.
+    const sesion = await sesionActual();
+    const alcance = sesion?.alcances.captacion;
+
+    if (!sesion) {
+      return NextResponse.json({ error: "Sesión caducada" }, { status: 401 });
+    }
+    if (alcance !== "total" && alcance !== "equipo") {
+      return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+    }
   }
 
   try {

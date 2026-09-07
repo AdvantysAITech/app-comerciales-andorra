@@ -6,6 +6,7 @@ import { enlaceContacto, enlaceOportunidad } from "@/lib/ghl/enlaces";
 import { CLASIFICACION, type Clasificacion } from "@/lib/domain/bant";
 import { ETIQUETA_LINEA, ETIQUETA_ROL, type LineaNegocio, type RolJV } from "@/lib/domain/tipos";
 import ListaLeads, { type FilaLead } from "./lista";
+import BotonSincronizar from "./boton-sincronizar";
 
 // Igual que /leads/nuevo y /documentos. Esta página depende de la sesión y de
 // datos que cambian a cada alta: nunca debe servirse desde caché.
@@ -180,9 +181,16 @@ export default async function MisLeads() {
           </h1>
         </div>
 
-        <Link href="/leads/nuevo" className="boton">
-          Nuevo lead
-        </Link>
+        <div className="flex items-start gap-3">
+          {/* Solo con alcance sobre los leads de otros. La comprobación
+              recorre toda la tabla, no solo lo propio, así que ponérselo
+              delante a quien solo ve lo suyo sería ofrecerle un botón cuyo
+              efecto no puede observar. La ruta lo comprueba también. */}
+          {!soloMios && <BotonSincronizar />}
+          <Link href="/leads/nuevo" className="boton">
+            Nuevo lead
+          </Link>
+        </div>
       </div>
 
       {errorBorradores && (
