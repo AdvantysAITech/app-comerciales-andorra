@@ -44,20 +44,30 @@ export async function buscarContacto(params: {
   return data.contacts?.[0] ?? null;
 }
 
+/**
+ * Lo obligatorio es lo que abre la ficha: nombre, email, teléfono y empresa.
+ * El resto es opcional desde el 07/09/2026, porque el alta dejó de pedirlo y
+ * se completa después en el Sistema Advantys.
+ *
+ * `campo()` ya descarta lo vacío, así que un contacto incompleto no manda
+ * campos en blanco: simplemente no los manda, y GHL conserva lo que hubiera
+ * si el contacto ya existía. Eso importa: un alta rápida no puede borrar
+ * datos que alguien rellenó a mano.
+ */
 export type DatosContacto = {
   nombre: string;
   email: string;
   telefono: string;
   empresa: string;
   cargo?: string;
-  ciudad: string;
-  pais: string;
+  ciudad?: string;
+  pais?: string;
   web?: string;
-  fuente: string;
-  idioma: string;
-  sector: string;
-  empleados: string;
-  facturacion: string;
+  fuente?: string;
+  idioma?: string;
+  sector?: string;
+  empleados?: string;
+  facturacion?: string;
   herramientas?: string;
 };
 
@@ -77,9 +87,11 @@ export async function upsertContacto(
       phone: d.telefono,
       companyName: d.empresa,
       website: d.web || undefined,
-      city: d.ciudad,
-      country: /^[A-Za-z]{2}$/.test(d.pais) ? d.pais.toUpperCase() : undefined,
-      source: `App Comercial · ${d.fuente}`,
+      city: d.ciudad || undefined,
+      country: d.pais && /^[A-Za-z]{2}$/.test(d.pais) ? d.pais.toUpperCase() : undefined,
+      // Sin fuente, «App Comercial» a secas. Antes salía «App Comercial ·
+      // undefined» en cuanto el campo faltaba.
+      source: d.fuente ? `App Comercial · ${d.fuente}` : "App Comercial",
       customFields: [
         ...campo(CAMPO_CONTACTO.cargo, d.cargo),
         ...campo(CAMPO_CONTACTO.web_empresa, d.web),

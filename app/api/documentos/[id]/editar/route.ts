@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getSupabaseRoute } from "@/lib/supabase/route-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { renderizarPdf } from "@/lib/documentos/render";
-import { adjuntarDocumentoOportunidad } from "@/lib/ghl/documentos";
 import { cuerpoEdicionSchema, detalleZod } from "@/lib/documentos/edicion";
 import type { Alcance } from "@/lib/ia/salida";
 import type { Ruta } from "@/lib/domain/rutas";
@@ -23,9 +22,18 @@ export const runtime = "nodejs";
  *      Al revés se archivaría el estado previo de una edición que luego se
  *      rechaza, y el historial acabaría lleno de versiones que nunca fueron.
  *
- * Storage y GHL van como «best effort»: si fallan, el guardado sigue siendo
- * válido y el fallo queda escrito en `ghl_error`. Perder la conexión con el
- * CRM no puede impedirle a nadie corregir una propuesta.
+ * ESTO YA NO SUBE NADA A GHL (decisión de Jacob, 07/09/2026). Guardar sube
+ * `ediciones`, así que la versión nueva deja de coincidir con
+ * `validado_version` y nace sin validar. Se puede seguir viendo y descargando;
+ * al CRM llega cuando alguien con alcance equipo o total le dé a validar.
+ *
+ * La validación anterior no se toca: `validado_en` y `validado_version` se
+ * quedan como están, apuntando a la versión que sí se aprobó. Una validación
+ * no se revoca nunca; simplemente esta es otra versión.
+ *
+ * Storage sigue siendo «best effort»: si falla, el guardado es válido igual y
+ * el fallo queda escrito. Perder Storage no puede impedirle a nadie corregir
+ * una propuesta.
  */
 export async function PATCH(
   request: Request,
@@ -75,7 +83,7 @@ export async function PATCH(
 
   const { data: lead } = await supabase
     .from("leads")
-    .select("uuid_origen, empresa, ruta, precio_presentado, ghl_oportunidad_id")
+    .select("uuid_origen, empresa, ruta, precio_presentado")
     .eq("id", doc.lead_id)
     .maybeSingle();
 
@@ -206,7 +214,8 @@ export async function PATCH(
     return NextResponse.json({
       ok: true,
       pdfRegenerado: false,
-      crm: { subidoEn: null, error: `No se pudo regenerar el PDF: ${detalle}` },
+      version,
+      aviso: `No se pudo regenerar el PDF: ${detalle}`,
     });
   }
 
@@ -241,46 +250,10 @@ export async function PATCH(
   }
 
   /* ---------------------------------------------------------------- */
-  /* 7. CRM                                                            */
+  /* 7. Fin                                                            */
   /* ---------------------------------------------------------------- */
 
-  if (!lead.ghl_oportunidad_id) {
-    const aviso = "El lead no tiene oportunidad en el Sistema Advantys.";
-    await admin.from("documentos").update({ ghl_error: aviso }).eq("id", id);
-    return NextResponse.json({
-      ok: true,
-      pdfRegenerado: true,
-      crm: { subidoEn: null, error: aviso },
-    });
-  }
-
-  try {
-    // Reemplaza el archivo del campo «Documentacion»: hay un presupuesto por
-    // lead, así que la versión editada sustituye a la anterior en el CRM.
-    await adjuntarDocumentoOportunidad({
-      oportunidadId: lead.ghl_oportunidad_id,
-      pdf,
-      nombreArchivo,
-    });
-
-    const subidoEn = new Date().toISOString();
-    await admin
-      .from("documentos")
-      .update({ ghl_subido_en: subidoEn, ghl_error: null })
-      .eq("id", id);
-
-    return NextResponse.json({ ok: true, pdfRegenerado: true, crm: { subidoEn, error: null } });
-  } catch (e) {
-    const detalle = e instanceof Error ? e.message : "Error desconocido";
-    console.error("[editar] adjuntar en GHL falló", detalle);
-
-    const aviso = `No se pudo actualizar en el CRM: ${detalle}`;
-    await admin.from("documentos").update({ ghl_error: aviso }).eq("id", id);
-
-    return NextResponse.json({
-      ok: true,
-      pdfRegenerado: true,
-      crm: { subidoEn: null, error: aviso },
-    });
-  }
+  // No hay paso de CRM. La versión que acaba de nacer está sin validar, y al
+  // CRM solo sube lo validado. La pantalla lo dirá; aquí no hay nada que hacer.
+  return NextResponse.json({ ok: true, pdfRegenerado: true, version });
 }

@@ -22,14 +22,15 @@ function fechaLarga(iso: string) {
  *
  * Dos botones, y ninguno miente sobre lo que hace:
  *
- *   - «Descargar PDF» descarga. NO envía al CRM: la subida ocurre al generar
- *     el documento y al guardar una edición, no al descargarlo.
- *   - «Modificar propuesta» abre la edición, y allí el botón de guardar sí
- *     dice explícitamente que actualiza el CRM, porque es lo que hace.
+ *   - «Descargar PDF» descarga, y solo descarga.
+ *   - «Modificar propuesta» abre la edición. Guardar regenera el PDF y crea
+ *     una versión nueva; no manda nada a GoHighLevel.
  *
- * Para que el comercial sepa si el documento ha llegado a GHL está el
- * indicador de estado, que lee `ghl_subido_en` y `ghl_error`. Esos dos datos
- * ya se guardaban desde el principio y no se enseñaban en ninguna pantalla.
+ * Desde el 07/09/2026 NADA de esta pantalla sube al CRM: eso lo hace validar,
+ * y validar es de quien tenga alcance equipo o total. Lo que sí hay aquí es
+ * el estado, que responde a las dos preguntas que antes obligaban a abrir
+ * GoHighLevel: si esta versión está validada, y qué versión es la que tiene
+ * ahora mismo la oportunidad.
  */
 export default function Acciones({
   id,
@@ -37,6 +38,9 @@ export default function Acciones({
   precioCalculado,
   puedeEditar,
   validado,
+  validadoAntes,
+  versionActual,
+  ghlVersion,
   editadoEn,
   ediciones,
   crm: crmInicial,
@@ -45,7 +49,13 @@ export default function Acciones({
   doc: DocumentoCliente;
   precioCalculado: number | null;
   puedeEditar: boolean;
+  /** La versión que se está viendo está validada. */
   validado: boolean;
+  /** Hubo validación, pero de una versión anterior a esta. */
+  validadoAntes: boolean;
+  versionActual: number;
+  /** Versión que cuelga hoy de la oportunidad en GHL. Null = nunca subió nada. */
+  ghlVersion: number | null;
   editadoEn: string | null;
   ediciones: number;
   crm: EstadoCrm;
@@ -77,8 +87,7 @@ export default function Acciones({
         doc={doc}
         precioCalculado={precioCalculado}
         onCancelar={() => setEditando(false)}
-        onGuardado={(nuevoCrm) => {
-          setCrm(nuevoCrm);
+        onGuardado={() => {
           setEditando(false);
           // El servidor vuelve a construir el documento con la edición ya
           // guardada. Sin esto la pantalla seguiría mostrando el texto viejo
@@ -95,11 +104,16 @@ export default function Acciones({
         <div>
           <p className="traza">
             {doc.referencia}
-            {!validado && <span className="text-block"> · pendiente de validación</span>}
+            {!validado && (
+              <span className="text-block">
+                {" "}
+                · {validadoAntes ? "modificada tras validarse" : "pendiente de validación"}
+              </span>
+            )}
             {ediciones > 0 && editadoEn && (
               <span className="text-tinta-media">
                 {" "}
-                · modificada el {fechaLarga(editadoEn)}
+                · v{versionActual}, modificada el {fechaLarga(editadoEn)}
               </span>
             )}
           </p>
@@ -109,10 +123,15 @@ export default function Acciones({
           <p className="traza mt-1" data-error={crm.error ? "true" : undefined}>
             {crm.error
               ? crm.error
-              : crm.subidoEn
-                ? `Enviado al CRM el ${fechaLarga(crm.subidoEn)}`
-                : "Todavía sin enviar al CRM"}
-            {(crm.error || !crm.subidoEn) && puedeEditar && (
+              : ghlVersion === null || !crm.subidoEn
+                ? "Todavía sin enviar al CRM"
+                : ghlVersion === versionActual
+                  ? `Enviado al CRM el ${fechaLarga(crm.subidoEn)}`
+                  : `En el CRM está la v${ghlVersion}; esto es la v${versionActual}`}
+            {/* Reintentar solo tiene sentido sobre algo validado: es reenviar
+                lo que ya se aprobó. Si la versión está sin validar, el botón
+                sería una puerta trasera para colarla sin revisión. */}
+            {validado && (crm.error || ghlVersion !== versionActual) && puedeEditar && (
               <>
                 {" · "}
                 <button
@@ -152,8 +171,12 @@ export default function Acciones({
       {!validado && (
         <div className="no-imprimir mx-auto max-w-[19cm] px-6 pb-4">
           <p className="border-l-2 border-block bg-elevado px-4 py-3 text-sm">
-            Esta propuesta todavía no la ha revisado Jacob. Puedes descargarla, pero
-            repásala antes de enviársela al cliente.
+            {validadoAntes
+              ? `Has modificado la propuesta después de que se validara. Puedes ` +
+                `descargar esta versión y seguir ajustándola, pero en el CRM sigue ` +
+                `la anterior: para que suba la v${versionActual} hace falta validarla otra vez.`
+              : "Esta propuesta todavía no está validada. Puedes descargarla y " +
+                "modificarla, pero no se enviará al CRM hasta que alguien la revise."}
           </p>
         </div>
       )}

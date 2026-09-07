@@ -5,7 +5,6 @@ import { sesionActual } from "@/lib/permisos";
 import { construirEntrada, datosCliente } from "@/lib/ia/entrada";
 import { generarAlcance } from "@/lib/ia/generar";
 import { renderizarPdf } from "@/lib/documentos/render";
-import { adjuntarDocumentoOportunidad } from "@/lib/ghl/documentos";
 import { calcularPrecio } from "@/lib/precios";
 import { calcularBant } from "@/lib/domain/bant";
 import type { RespuestasChecklist } from "@/lib/domain/checklists";
@@ -172,7 +171,6 @@ export async function POST(
       uuid: lead.uuid_origen,
       empresa: lead.empresa,
       precio: calculo.presentado,
-      oportunidadId: lead.ghl_oportunidad_id,
       baseUrl: request.url,
     });
 
@@ -195,7 +193,8 @@ export async function POST(
 /* ================================================================== */
 
 /**
- * Ensambla el PDF, lo guarda en Storage y lo adjunta a la oportunidad.
+ * Ensambla el PDF y lo guarda en Storage. Nada más: desde el 07/09/2026 no
+ * toca GHL. La subida al CRM la dispara la validación.
  *
  * Se traga sus propios errores por diseño (ver arriba). Lo que no hace es
  * tragárselos en silencio: cada fallo queda en `documentos.ghl_error` y en el
@@ -208,7 +207,6 @@ async function materializarPdf(args: {
   uuid: string;
   empresa: string;
   precio: number | null;
-  oportunidadId: string | null;
   baseUrl: string;
 }) {
   const admin = createAdminClient();
@@ -260,35 +258,12 @@ async function materializarPdf(args: {
       .eq("id", args.documentoId);
   }
 
-  /* --- GHL ---------------------------------------------------------- */
+  /* --- GHL: aquí ya no --------------------------------------------- */
 
-  // Sin oportunidad no hay dónde adjuntar. No es un fallo: el lead pudo
-  // crearse con el contacto y sin oportunidad.
-  if (!args.oportunidadId) {
-    await admin
-      .from("documentos")
-      .update({ ghl_error: "El lead no tiene oportunidad en el Sistema Advantys." })
-      .eq("id", args.documentoId);
-    return;
-  }
-
-  try {
-    await adjuntarDocumentoOportunidad({
-      oportunidadId: args.oportunidadId,
-      pdf,
-      nombreArchivo,
-    });
-
-    await admin
-      .from("documentos")
-      .update({ ghl_subido_en: new Date().toISOString(), ghl_error: null })
-      .eq("id", args.documentoId);
-  } catch (e) {
-    const detalle = e instanceof Error ? e.message : "Error desconocido";
-    console.error("[documento] adjuntar en GHL falló", detalle);
-    await admin
-      .from("documentos")
-      .update({ ghl_error: `No se pudo adjuntar en el CRM: ${detalle}` })
-      .eq("id", args.documentoId);
-  }
+  // Generar NO sube nada al CRM (decisión de Jacob, 07/09/2026). El documento
+  // nace sin validar, y al CRM solo sube lo validado. La subida vive ahora en
+  // `app/documentos/[id]/validar/route.ts`, a través de `publicarEnCrm()`.
+  //
+  // El aviso de «este lead no tiene oportunidad» tampoco se da aquí: se dará
+  // al intentar validar, que es cuando importa y cuando hay alguien mirando.
 }

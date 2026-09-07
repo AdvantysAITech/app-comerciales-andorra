@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { DocumentoCliente } from "@/lib/documentos/cliente";
-import { cuerpoEdicionSchema, detalleZod, type EstadoCrm } from "@/lib/documentos/edicion";
+import { cuerpoEdicionSchema, detalleZod } from "@/lib/documentos/edicion";
 
 const euros = (n: number) =>
   n.toLocaleString("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
@@ -38,7 +38,7 @@ export default function FormularioEdicion({
   doc: DocumentoCliente;
   precioCalculado: number | null;
   onCancelar: () => void;
-  onGuardado: (crm: EstadoCrm) => void;
+  onGuardado: () => void;
 }) {
   const [empresa, setEmpresa] = useState(doc.empresa);
   const [resumen, setResumen] = useState(doc.resumen);
@@ -116,7 +116,9 @@ export default function FormularioEdicion({
         return;
       }
 
-      onGuardado(datos.crm ?? { subidoEn: null, error: null });
+      // Sin argumento a propósito: guardar ya no toca el CRM, así que el
+      // estado de la subida no cambia. Refrescar la pantalla basta.
+      onGuardado();
     } catch {
       setError("No se pudo contactar con el servidor.");
     } finally {

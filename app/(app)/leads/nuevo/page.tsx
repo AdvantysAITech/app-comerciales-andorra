@@ -2,12 +2,42 @@ import { supabaseServer } from "@/lib/supabase/server";
 import type { Spinoff } from "@/lib/ghl/spinoffs";
 import { RUTAS, DEFINICION_RUTA, type Ruta } from "@/lib/domain/rutas";
 import { fasesDeEntrada } from "@/lib/ghl/ids";
-import FormularioLead, { type FasesPorRuta } from "./formulario";
+import FormularioLead, {
+  type FasesPorRuta,
+  type BorradorCargado,
+  type EstadoBorrador,
+} from "./formulario";
 
 export const dynamic = "force-dynamic";
 
-export default async function NuevoLead() {
+export default async function NuevoLead({
+  searchParams,
+}: {
+  searchParams: Promise<{ borrador?: string }>;
+}) {
+  const { borrador: uuidBorrador } = await searchParams;
   const supabase = await supabaseServer();
+
+  /* ------------------------------------------------------------------ */
+  /* Borrador que se retoma                                              */
+  /* ------------------------------------------------------------------ */
+
+  // La RLS decide si este comercial puede verlo. Si el uuid no es suyo y no
+  // tiene alcance, no vuelve fila y el formulario arranca vacío: no hace
+  // falta comprobar el dueño aquí.
+  let borrador: BorradorCargado | null = null;
+
+  if (uuidBorrador) {
+    const { data } = await supabase
+      .from("leads_borrador")
+      .select("uuid, estado")
+      .eq("uuid", uuidBorrador)
+      .maybeSingle();
+
+    if (data) {
+      borrador = { uuid: data.uuid, estado: (data.estado ?? {}) as EstadoBorrador };
+    }
+  }
 
   // Se lee de la caché, no de GHL: el alta de un lead no puede depender de
   // que GHL responda a tiempo. La caché la refresca el cron diario.
@@ -40,12 +70,15 @@ export default async function NuevoLead() {
 
   return (
     <div>
-      <p className="traza">Alta de lead</p>
-      <h1 className="mt-2 mb-8 text-2xl font-semibold tracking-tight">Nuevo lead</h1>
+      <p className="traza">{borrador ? "Borrador sin terminar" : "Alta de lead"}</p>
+      <h1 className="mt-2 mb-8 text-2xl font-semibold tracking-tight">
+        {borrador ? "Continuar el lead" : "Nuevo lead"}
+      </h1>
       <FormularioLead
         spinoffs={spinoffs}
         fasesPorRuta={fasesPorRuta}
         errorSpinoffs={errorSpinoffs}
+        borrador={borrador}
       />
     </div>
   );

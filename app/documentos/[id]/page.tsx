@@ -61,7 +61,7 @@ export default async function VerDocumento({
     // Literal de una pieza a propósito: si se parte en dos y se concatena,
     // supabase-js deja de inferir el tipo de la fila y `doc` vuelve como
     // GenericStringError.
-    .select("id, alcance, validado_en, lead_id, comercial_id, edicion, precio_editado, editado_en, ediciones, ghl_subido_en, ghl_error")
+    .select("id, alcance, validado_en, validado_version, lead_id, comercial_id, edicion, precio_editado, editado_en, ediciones, ghl_subido_en, ghl_error, ghl_version")
     .eq("id", id)
     .maybeSingle();
 
@@ -113,15 +113,22 @@ export default async function VerDocumento({
     permiso?.alcance === "total";
 
   /**
-   * La validación ya NO bloquea la descarga (decisión de Jacob, 24/08/2026,
-   * que modifica el punto 7.6 del DERCAS): el comercial descarga el PDF en
-   * cuanto se genera.
+   * La validación no bloquea la descarga (decisión de Jacob, 24/08/2026, que
+   * modifica el punto 7.6 del DERCAS): el comercial descarga el PDF en cuanto
+   * se genera, y desde el 04/09 también puede modificarlo.
    *
-   * `validado_en` se conserva y se sigue mostrando aquí porque documenta si
-   * la propuesta ha pasado revisión, y esa información le sirve al comercial
-   * para decidir si la manda ya o espera. Pero es un aviso, no una puerta.
+   * Lo que sí bloquea, desde el 07/09, es la subida al CRM. Y se mira POR
+   * VERSIÓN: `validado_en` no se revoca nunca, pero apunta a la versión que se
+   * aprobó. Si `ediciones` ha subido desde entonces, lo que hay en pantalla es
+   * otra cosa y necesita su propio visto bueno.
    */
-  const validado = Boolean(doc.validado_en);
+  const versionActual = doc.ediciones ?? 0;
+  const validado = doc.validado_en !== null && doc.validado_version === versionActual;
+
+  // Hubo validación, pero de una versión anterior. Es el caso que hay que
+  // contar bien: ni «sin validar» a secas ni «validado», sino «lo validaste,
+  // y después esto se ha tocado».
+  const validadoAntes = doc.validado_en !== null && !validado;
 
   return (
     <Acciones
@@ -130,8 +137,11 @@ export default async function VerDocumento({
       precioCalculado={lead.precio_presentado}
       puedeEditar={puedeEditar}
       validado={validado}
+      validadoAntes={validadoAntes}
+      versionActual={versionActual}
+      ghlVersion={doc.ghl_version}
       editadoEn={doc.editado_en}
-      ediciones={doc.ediciones ?? 0}
+      ediciones={versionActual}
       crm={{ subidoEn: doc.ghl_subido_en, error: doc.ghl_error }}
     />
   );

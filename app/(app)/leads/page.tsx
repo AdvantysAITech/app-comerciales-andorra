@@ -7,6 +7,10 @@ import { CLASIFICACION, type Clasificacion } from "@/lib/domain/bant";
 import { ETIQUETA_LINEA, ETIQUETA_ROL, type LineaNegocio, type RolJV } from "@/lib/domain/tipos";
 import ListaLeads, { type FilaLead } from "./lista";
 
+// Igual que /leads/nuevo y /documentos. Esta página depende de la sesión y de
+// datos que cambian a cada alta: nunca debe servirse desde caché.
+export const dynamic = "force-dynamic";
+
 type Fila = {
   id: string;
   creado_en: string;
@@ -42,9 +46,13 @@ export default async function MisLeads() {
   // El filtro protege la PANTALLA; la RLS de la tabla protege los DATOS.
   // Las dos capas, no una: filtrar solo aquí deja la tabla abierta a quien
   // consulte con su propio token de sesión.
+  // `eliminado_en` lo escribe el cron de `/api/leads/sincronizar-crm` cuando
+  // GHL responde 404: el lead se borró en el CRM. La fila se queda —es el
+  // registro de auditoría de la captación— pero desaparece de la lista.
   let consulta = supabase
     .from("leads")
     .select("*")
+    .is("eliminado_en", null)
     .order("creado_en", { ascending: false })
     .limit(50);
 
@@ -52,6 +60,49 @@ export default async function MisLeads() {
 
   const { data } = await consulta;
   const leads = (data ?? []) as Fila[];
+
+  /* ------------------------------------------------------------------ */
+  /* Borradores sin terminar                                             */
+  /* ------------------------------------------------------------------ */
+
+  // Van arriba y aparte: son trabajo a medias, no altas. Mezclarlos con los
+  // leads registrados haría creer que el contacto ya está en su pipeline.
+  // `eliminado_en` lo escribe la misma sincronización que marca los leads:
+  // si el contacto se borró en GHL, el borrador deja de mostrarse.
+  let consultaBorradores = supabase
+    .from("leads_borrador")
+    .select("uuid, nombre, empresa, actualizado_en, ghl_error")
+    .is("eliminado_en", null)
+    .order("actualizado_en", { ascending: false })
+    .limit(20);
+
+  if (soloMios) consultaBorradores = consultaBorradores.eq("comercial_id", sesion.usuario.id);
+
+  const { data: datosBorradores, error: errorBorradores } = await consultaBorradores;
+
+  // Un fallo aquí NO puede quedarse mudo. Sin esto, una tabla que no existe o
+  // una columna mal escrita se ven exactamente igual que «no hay borradores»,
+  // y el comercial da por perdido lo que sí había guardado.
+  if (errorBorradores) {
+    console.error("[leads] no se pudieron leer los borradores", {
+      code: errorBorradores.code,
+      message: errorBorradores.message,
+      details: errorBorradores.details,
+      hint: errorBorradores.hint,
+    });
+  }
+
+  const borradores = (datosBorradores ?? []).map((b) => ({
+    uuid: b.uuid as string,
+    nombre: b.nombre as string,
+    empresa: b.empresa as string,
+    ghlError: (b.ghl_error ?? null) as string | null,
+    fecha: new Date(b.actualizado_en as string).toLocaleString("es-ES", {
+      dateStyle: "long",
+      timeStyle: "short",
+      timeZone: ZONA,
+    }),
+  }));
 
   /* ------------------------------------------------------------------ */
   /* Documentos ya generados                                             */
@@ -134,7 +185,43 @@ export default async function MisLeads() {
         </Link>
       </div>
 
-      {filas.length === 0 ? (
+      {errorBorradores && (
+        <p className="mb-8 border-l-2 border-block bg-elevado px-4 py-3 text-sm">
+          No se han podido cargar los leads sin terminar. Si habías guardado alguno,
+          sigue estando: es la consulta la que falla, no el borrador. El detalle está
+          en el log del servidor.
+        </p>
+      )}
+
+      {borradores.length > 0 && (
+        <section className="mb-8">
+          <p className="traza mb-3">Sin terminar</p>
+          <ul className="divide-y divide-line border border-line bg-surface">
+            {borradores.map((b) => (
+              <li key={b.uuid}>
+                <Link
+                  href={`/leads/nuevo?borrador=${b.uuid}`}
+                  className="flex min-h-14 items-baseline justify-between gap-4 px-4 py-3 hover:bg-elevado"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">{b.nombre}</span>
+                    <span className="traza mt-0.5 block truncate normal-case">
+                      {b.empresa}
+                      {b.ghlError && " · el contacto no llegó al CRM"}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className="traza block text-block">Continuar</span>
+                    <span className="traza block">{b.fecha}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {filas.length === 0 && borradores.length === 0 ? (
         <div className="border border-dashed border-line p-10 text-center">
           <p className="text-tinta-media">
             {soloMios
@@ -146,7 +233,9 @@ export default async function MisLeads() {
           </Link>
         </div>
       ) : (
-        <ListaLeads leads={filas} puedeDocumentos={puedeVer(sesion, "documentos")} />
+        filas.length > 0 && (
+          <ListaLeads leads={filas} puedeDocumentos={puedeVer(sesion, "documentos")} />
+        )
       )}
     </div>
   );

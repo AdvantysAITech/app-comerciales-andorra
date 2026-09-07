@@ -132,19 +132,28 @@ const base = z.object({
   telefono: z.string().trim().min(6, "Incluye el prefijo internacional"),
   empresa: z.string().trim().min(2, "Falta la razón social"),
   cargo: z.string().trim().optional(),
-  ciudad: z.string().trim().min(2, "Indica la ciudad"),
-  pais: z.string().trim().min(2, "Indica el país"),
+  // Desde el 07/09/2026 el alta pide solo lo imprescindible para abrir la
+  // ficha: nombre, email, teléfono, empresa, cargo e interés. Todo lo demás
+  // es opcional y se completa después en el Sistema Advantys, que es donde
+  // vive la ficha del contacto.
+  //
+  // `.min(2)` dentro de `.optional()` sigue validando SI viene con contenido:
+  // no se pide, pero si algún día se vuelve a pedir, «a» sigue sin valer.
+  ciudad: z.string().trim().min(2, "Indica la ciudad").optional(),
+  pais: z.string().trim().min(2, "Indica el país").optional(),
   web: z
     .string()
     .trim()
     .transform((v) => (v === "" || /^https?:\/\//i.test(v) ? v : `https://${v}`))
     .pipe(z.union([z.url("Revisa la web"), z.literal("")]))
     .optional(),
-  fuente: z.enum(FUENTES, "Indica de dónde viene el lead"),
-  idioma: z.enum(IDIOMAS, "Selecciona el idioma"),
-  sector: z.enum(SECTORES, "Selecciona el sector"),
-  empleados: z.enum(EMPLEADOS, "Selecciona el número de empleados"),
-  facturacion: z.enum(FACTURACION, "Selecciona la facturación"),
+  fuente: z.enum(FUENTES, "Indica de dónde viene el lead").optional(),
+  // El idioma no se pregunta pero se sigue mandando con su valor por defecto:
+  // un contacto sin idioma en GHL no recibe bien las secuencias de correo.
+  idioma: z.enum(IDIOMAS, "Selecciona el idioma").optional(),
+  sector: z.enum(SECTORES, "Selecciona el sector").optional(),
+  empleados: z.enum(EMPLEADOS, "Selecciona el número de empleados").optional(),
+  facturacion: z.enum(FACTURACION, "Selecciona la facturación").optional(),
   herramientas: z.string().trim().optional(),
   valorEstimado: z.number().nonnegative().optional(),
   notas: z.string().trim().optional(),
@@ -177,6 +186,30 @@ export const contactoSchema = base.pick({
   facturacion: true,
   herramientas: true,
 });
+
+/**
+ * Lo que hace falta para guardar un borrador.
+ *
+ * Deliberadamente corto: nombre, email, teléfono y empresa —lo que necesita
+ * `upsertContacto` para crear el contacto en GHL— más el uuid y el estado del
+ * formulario. Ni ruta, ni checklist, ni BANT: un borrador de la primera
+ * pantalla puede no tener nada de eso todavía.
+ *
+ * `estado` va sin validar por dentro a propósito. Es el estado interno del
+ * formulario y su forma la decide el formulario; validarla aquí obligaría a
+ * tocar este esquema cada vez que se añade un campo a una pantalla, y el
+ * primer olvido dejaría a un comercial sin poder guardar.
+ */
+export const borradorSchema = z.object({
+  uuid: z.uuid("Falta el identificador del lead"),
+  nombre: z.string().trim().min(2, "Escribe nombre y apellidos"),
+  email: z.string().trim().email("Revisa el email"),
+  telefono: z.string().trim().min(6, "Incluye el prefijo internacional"),
+  empresa: z.string().trim().min(2, "Falta la razón social"),
+  estado: z.record(z.string(), z.unknown()),
+});
+
+export type BorradorInput = z.infer<typeof borradorSchema>;
 
 export const leadSchema = base.superRefine((lead, ctx) => {
   if (requiereSpinoff(lead.ruta) && !lead.spinoffClave) {

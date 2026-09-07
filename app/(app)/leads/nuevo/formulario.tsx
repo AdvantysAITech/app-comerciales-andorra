@@ -4,17 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  FUENTES,
-  IDIOMAS,
-  SECTORES,
-  EMPLEADOS,
   PROCESOS,
-  FACTURACION,
-  ETIQUETA_FUENTE,
-  ETIQUETA_IDIOMA,
-  ETIQUETA_SECTOR,
-  ETIQUETA_EMPLEADOS,
-  ETIQUETA_FACTURACION,
   ETIQUETA_PROCESO,
   contactoSchema,
   type Proceso,
@@ -97,6 +87,9 @@ const CAMPOS_PASO: Record<string, Paso> = {
   web: "contacto", fuente: "contacto", idioma: "contacto",
   sector: "contacto", empleados: "contacto", facturacion: "contacto",
   herramientas: "contacto",
+  // El interés (T1 del árbol) se responde en el paso de contacto, así que su
+  // error tiene que llevar allí y no a Clasificación.
+  interes: "contacto",
   ruta: "clasificacion", spinoffClave: "clasificacion", faseId: "clasificacion",
   bant: "bant",
   uuid: "revision", valorEstimado: "revision", notas: "revision", procesos: "revision",
@@ -114,28 +107,64 @@ type Exito = {
   leadId?: string;
 };
 
+/**
+ * Estado del formulario tal cual se guarda en un borrador.
+ *
+ * Es el estado interno, no un modelo de dominio: se serializa entero y se
+ * vuelve a cargar entero. Por eso todo es opcional —un borrador puede haberse
+ * guardado en cualquier punto— y por eso el servidor no lo valida por dentro.
+ */
+export type EstadoBorrador = {
+  campos?: Partial<Campos>;
+  arbol?: RespuestasArbol;
+  ruta?: Ruta | null;
+  spinoffClave?: string;
+  faseId?: string;
+  bant?: RespuestasBant;
+  checklist?: RespuestasChecklist;
+  procesos?: Proceso[];
+  quiereInfo?: boolean;
+  paso?: Paso;
+};
+
+export type BorradorCargado = { uuid: string; estado: EstadoBorrador };
+
 export default function FormularioLead({
   spinoffs,
   fasesPorRuta,
   errorSpinoffs,
+  borrador,
 }: {
   spinoffs: Spinoff[];
   fasesPorRuta: FasesPorRuta;
   errorSpinoffs: string | null;
+  /** Borrador que se está retomando. Null = alta desde cero. */
+  borrador?: BorradorCargado | null;
 }) {
   const router = useRouter();
 
-  const [paso, setPaso] = useState<Paso>("contacto");
-  const [alcanzado, setAlcanzado] = useState(0);
+  const inicial = borrador?.estado ?? {};
 
-  const [campos, setCampos] = useState<Campos>(VACIO);
-  const [arbol, setArbol] = useState<RespuestasArbol>({});
-  const [ruta, setRuta] = useState<Ruta | null>(null);
-  const [spinoffClave, setSpinoffClave] = useState("");
-  const [faseId, setFaseId] = useState("");
-  const [bant, setBant] = useState<RespuestasBant>({});
-  const [checklist, setChecklist] = useState<RespuestasChecklist>({});
-  const [uuid, setUuid] = useState(() => crypto.randomUUID());
+  const [paso, setPaso] = useState<Paso>(inicial.paso ?? "contacto");
+  // Al retomar se da por alcanzado el paso donde se guardó, para poder
+  // navegar hacia atrás sin volver a pasar por todos los «Continuar».
+  const [alcanzado, setAlcanzado] = useState(() =>
+    inicial.paso ? Math.max(0, pasosDe(inicial.ruta ?? null).findIndex((p) => p.id === inicial.paso)) : 0,
+  );
+
+  const [campos, setCampos] = useState<Campos>({ ...VACIO, ...(inicial.campos ?? {}) });
+  const [arbol, setArbol] = useState<RespuestasArbol>(inicial.arbol ?? {});
+  const [ruta, setRuta] = useState<Ruta | null>(inicial.ruta ?? null);
+  const [spinoffClave, setSpinoffClave] = useState(inicial.spinoffClave ?? "");
+  const [faseId, setFaseId] = useState(inicial.faseId ?? "");
+  const [bant, setBant] = useState<RespuestasBant>(inicial.bant ?? {});
+  const [checklist, setChecklist] = useState<RespuestasChecklist>(inicial.checklist ?? {});
+  const [uuid, setUuid] = useState(() => borrador?.uuid ?? crypto.randomUUID());
+
+  /* --- Borrador ----------------------------------------------------- */
+
+  const [guardandoBorrador, setGuardandoBorrador] = useState(false);
+  const [avisoBorrador, setAvisoBorrador] = useState<string | null>(null);
 
   const [mostrarAsistente, setMostrarAsistente] = useState(false);
   const [sugerido, setSugerido] = useState(false);
@@ -145,10 +174,10 @@ export default function FormularioLead({
   const [enviando, setEnviando] = useState(false);
   const [exito, setExito] = useState<Exito | null>(null);
 
-  const [procesos, setProcesos] = useState<Proceso[]>([]);
+  const [procesos, setProcesos] = useState<Proceso[]>(inicial.procesos ?? []);
 
   /** RUTA 7 · el inversor pide (o no) el dossier de inversión. */
-  const [quiereInfo, setQuiereInfo] = useState(false);
+  const [quiereInfo, setQuiereInfo] = useState(inicial.quiereInfo ?? false);
 
   const resultadoBant = calcularBant(bant);
   const definicion = ruta ? DEFINICION_RUTA[ruta] : null;
@@ -223,23 +252,45 @@ export default function FormularioLead({
 
   /* ---------------- Navegación ---------------- */
 
+  /**
+   * Los campos que el alta ya no pide siguen existiendo en el estado, vacíos.
+   * Hay que mandarlos como `undefined`, no como cadena vacía: ahora son
+   * `z.enum(...).optional()`, y "" no es un valor válido del enum. Sin esto el
+   * servidor devolvería 422 pidiendo un sector que ya no se pregunta.
+   */
+  const datosContacto = () => ({
+    ...campos,
+    web: campos.web || undefined,
+    cargo: campos.cargo || undefined,
+    herramientas: campos.herramientas || undefined,
+    ciudad: campos.ciudad || undefined,
+    pais: campos.pais || undefined,
+    fuente: campos.fuente || undefined,
+    sector: campos.sector || undefined,
+    empleados: campos.empleados || undefined,
+    facturacion: campos.facturacion || undefined,
+  });
+
   function validarPaso(p: Paso): Record<string, string> {
     if (p === "contacto") {
       // Mismo esquema que usa el POST: si divergen, el fallo aparece en
       // Revision y apunta a un campo que alli no esta en pantalla.
-      const r = contactoSchema.safeParse({
-        ...campos,
-        web: campos.web || undefined,
-        cargo: campos.cargo || undefined,
-        herramientas: campos.herramientas || undefined,
-      });
-      if (r.success) return {};
-
+      const r = contactoSchema.safeParse(datosContacto());
       const e: Record<string, string> = {};
-      for (const issue of r.error.issues) {
-        const clave = String(issue.path[0]);
-        if (!e[clave]) e[clave] = issue.message;
+
+      if (!r.success) {
+        for (const issue of r.error.issues) {
+          const clave = String(issue.path[0]);
+          if (!e[clave]) e[clave] = issue.message;
+        }
       }
+
+      // El interés vive en este paso desde el 07/09/2026 y es obligatorio: sin
+      // él no hay ruta, y sin ruta no hay checklist ni presupuesto. Se
+      // comprueba aparte porque no es un campo de `contactoSchema`, sino la
+      // primera respuesta del árbol.
+      if (!arbol.T1) e.interes = "Indica qué busca este contacto";
+
       return e;
     }
 
@@ -376,11 +427,8 @@ export default function FormularioLead({
 
     const payload = {
       uuid,
-      ...campos,
-      web: campos.web || undefined,
-      cargo: campos.cargo || undefined,
+      ...datosContacto(),
       notas: campos.notas || undefined,
-      herramientas: campos.herramientas || undefined,
       valorEstimado: campos.valorEstimado ? Number(campos.valorEstimado) : undefined,
       ruta,
       faseId: faseId || undefined,
@@ -431,6 +479,76 @@ export default function FormularioLead({
       setErrorGeneral("No hay conexión con el servidor. El lead no se ha guardado.");
     } finally {
       setEnviando(false);
+    }
+  }
+
+  /**
+   * Guardar y seguir después.
+   *
+   * Solo exige los cuatro datos que necesita el contacto: nombre, email,
+   * teléfono y empresa. Nada más, ni siquiera el interés: si al comercial le
+   * cortan la conversación a la mitad, lo que tiene que poder hacer es
+   * guardar, no discutir con un formulario.
+   */
+  async function guardarBorrador() {
+    setGuardandoBorrador(true);
+    setAvisoBorrador(null);
+    setErrores({});
+    setErrorGeneral(null);
+
+    const faltan: Record<string, string> = {};
+    if (campos.nombre.trim().length < 2) faltan.nombre = "Escribe nombre y apellidos";
+    if (!campos.email.trim()) faltan.email = "Hace falta el email";
+    if (campos.telefono.trim().length < 6) faltan.telefono = "Incluye el prefijo internacional";
+    if (campos.empresa.trim().length < 2) faltan.empresa = "Falta la razón social";
+
+    if (Object.keys(faltan).length > 0) {
+      setErrores(faltan);
+      setPaso("contacto");
+      setErrorGeneral(
+        "Para guardar hacen falta al menos: " + Object.values(faltan).join(" · "),
+      );
+      setGuardandoBorrador(false);
+      return;
+    }
+
+    const estado: EstadoBorrador = {
+      campos, arbol, ruta, spinoffClave, faseId, bant, checklist, procesos, quiereInfo, paso,
+    };
+
+    try {
+      const res = await fetch("/api/leads/borrador", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uuid,
+          nombre: campos.nombre,
+          email: campos.email,
+          telefono: campos.telefono,
+          empresa: campos.empresa,
+          estado,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorGeneral(data.error ?? "No se pudo guardar el borrador.");
+        if (data.errores) setErrores(data.errores);
+        return;
+      }
+
+      // El contacto puede haber fallado sin que el borrador se pierda. Se
+      // dice, en vez de dejar que se descubra al buscarlo en el CRM.
+      setAvisoBorrador(
+        data.ghl?.error
+          ? data.ghl.error
+          : "Guardado. Lo tienes en «Sin terminar», dentro de tus leads.",
+      );
+      router.refresh();
+    } catch {
+      setErrorGeneral("No hay conexión con el servidor. El borrador no se ha guardado.");
+    } finally {
+      setGuardandoBorrador(false);
     }
   }
 
@@ -510,23 +628,23 @@ export default function FormularioLead({
             <Campo etiqueta="Email" tipo="email" valor={campos.email} onChange={set("email")} onBlur={comprobarContacto} error={errores.email} />
             <Campo etiqueta="Teléfono" valor={campos.telefono} onChange={set("telefono")} onBlur={comprobarContacto} error={errores.telefono} marcador="+376 ..." />
             <Campo etiqueta="Cargo (opcional)" valor={campos.cargo} onChange={set("cargo")} />
-            <Campo etiqueta="Ciudad" valor={campos.ciudad} onChange={set("ciudad")} error={errores.ciudad} />
-            <Campo etiqueta="País" valor={campos.pais} onChange={set("pais")} error={errores.pais} />
-            <Campo etiqueta="Web (opcional)" valor={campos.web} onChange={set("web")} marcador="https://" error={errores.web} />
 
-            <Lista id="fuente" etiqueta="Fuente de captación" valor={campos.fuente}
-              opciones={FUENTES} etiquetas={ETIQUETA_FUENTE} onChange={set("fuente")} error={errores.fuente} />
-            <Lista id="idioma" etiqueta="Idioma preferido" valor={campos.idioma}
-              opciones={IDIOMAS} etiquetas={ETIQUETA_IDIOMA} onChange={set("idioma")} />
-            <Lista id="sector" etiqueta="Sector" valor={campos.sector}
-              opciones={SECTORES} etiquetas={ETIQUETA_SECTOR} onChange={set("sector")} error={errores.sector} />
-            <Lista id="empleados" etiqueta="Número de empleados" valor={campos.empleados}
-              opciones={EMPLEADOS} etiquetas={ETIQUETA_EMPLEADOS} onChange={set("empleados")} error={errores.empleados} />
-            <Lista id="facturacion" etiqueta="Facturación anual" valor={campos.facturacion}
-              opciones={FACTURACION} etiquetas={ETIQUETA_FACTURACION} onChange={set("facturacion")} error={errores.facturacion} />
-
-            <Campo etiqueta="Herramientas actuales (opcional)" valor={campos.herramientas}
-              onChange={set("herramientas")} marcador="CRM, ERP…" />
+            {/* El interés es T1 del árbol de clasificación, no un campo suelto.
+                Se responde aquí porque es lo primero que se sabe de una
+                conversación, y de él sale la ruta: las tres opciones que no
+                son «su propia empresa» la resuelven ellas solas y dejan el
+                paso 2 sin preguntas. Sin `mostrarResultado`: la ruta se
+                presenta en Clasificación, que es donde se revisa. */}
+            <div className="sm:col-span-2">
+              <ArbolClasificacion
+                respuestas={arbol}
+                rutaResuelta={ruta}
+                onResponder={(r, nueva) => { fijarRuta(nueva, r); setSugerido(false); }}
+                filtro={(nodoId) => nodoId === "T1"}
+                mostrarResultado={false}
+              />
+              {errores.interes && <p className="error mt-2">{errores.interes}</p>}
+            </div>
           </div>
         )}
 
@@ -544,10 +662,14 @@ export default function FormularioLead({
               </p>
             )}
 
+            {/* T1 ya se respondió en el paso de contacto. Aquí van las
+                preguntas que quedan; si la ruta salió directa de T1 no hay
+                ninguna, y el recuadro de abajo es todo lo que se ve. */}
             <ArbolClasificacion
               respuestas={arbol}
               rutaResuelta={ruta}
               onResponder={(r, nueva) => { fijarRuta(nueva, r); setSugerido(false); }}
+              filtro={(nodoId) => nodoId !== "T1"}
             />
             {errores.ruta && <p className="error">{errores.ruta}</p>}
 
@@ -792,8 +914,28 @@ export default function FormularioLead({
         ) : (
           <button className="boton" onClick={avanzar}>Continuar</button>
         )}
+
+        {/* En todos los pasos menos el último. En Revisión ya está «Dar de
+            alta» al lado, y dos botones de guardar juntos que hacen cosas
+            distintas es como se manda un lead a medias sin querer. */}
+        {paso !== "revision" && (
+          <button
+            className="boton-fantasma"
+            onClick={guardarBorrador}
+            disabled={guardandoBorrador || enviando}
+          >
+            {guardandoBorrador ? "Guardando…" : "Guardar y seguir después"}
+          </button>
+        )}
+
         <Link href="/leads" className="traza hover:text-accent">Cancelar</Link>
       </div>
+
+      {avisoBorrador && (
+        <p className="mt-4 border-l-2 border-accent bg-accent-soft px-4 py-3 text-sm">
+          {avisoBorrador}
+        </p>
+      )}
 
       {mostrarAsistente && (
         <Asistente
@@ -839,27 +981,6 @@ function Campo({
       <input id={id} className="campo" type={tipo} value={valor} placeholder={marcador}
         aria-invalid={error ? "true" : undefined}
         onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
-      {error && <p className="error">{error}</p>}
-    </div>
-  );
-}
-
-function Lista<T extends string>({
-  id, etiqueta, valor, opciones, etiquetas, onChange, error,
-}: {
-  id: string; etiqueta: string; valor: string;
-  opciones: readonly T[]; etiquetas: Record<T, string>;
-  onChange: (v: string) => void; error?: string;
-}) {
-  return (
-    <div>
-      <label className="etiqueta" htmlFor={id}>{etiqueta}</label>
-      <select id={id} className="campo" value={valor}
-        aria-invalid={error ? "true" : undefined}
-        onChange={(e) => onChange(e.target.value)}>
-        <option value="">Selecciona…</option>
-        {opciones.map((o) => <option key={o} value={o}>{etiquetas[o]}</option>)}
-      </select>
       {error && <p className="error">{error}</p>}
     </div>
   );
