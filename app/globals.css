@@ -365,7 +365,6 @@
   .traza[data-error="true"] {
     color: var(--bloqueo);
   }
-}
 
   .opcion {
     display: flex;
@@ -405,17 +404,40 @@
     text-transform: none;
     color: var(--tinta-tenue);
   }
+}
+/* ↑ Fin de @layer components. Todo lo que sigue va deliberadamente FUERA de
+   cualquier capa: en CSS lo no capado gana a lo capado, incluidas las
+   utilidades de Tailwind. */
 
-/* ================================================================
-   Documento de cliente. Independiente del tema de la aplicación:
-   esto se imprime y acaba en manos del cliente.
-   ================================================================ */
+/* ────────────────────────────────────────────────────────────────────────────
+   5. DOCUMENTO DE CLIENTE
+   Esta hoja se imprime y acaba en manos del cliente, asi que se blinda por
+   partida doble:
+
+   - Fuera de capa, para que una utilidad puesta por descuido en el JSX
+     (`className="documento p-8 text-sm"`) no pueda alterar el margen ni el
+     cuerpo de letra de una propuesta comercial.
+   - Con la paleta ENTERA reiniciada y `color-scheme: light`, para que el
+     documento se vea igual tenga el comercial el tema en claro o en oscuro.
+     Reiniciar solo los colores que usa la plantilla hoy no basta: `.traza`,
+     por ejemplo, tira de `--tinta-tenue`, que no es obvio al leer el JSX.
+   ──────────────────────────────────────────────────────────────────────────── */
 
 .documento {
+  color-scheme: light;
+
+  --lienzo: #ffffff;
+  --panel: #ffffff;
+  --elevado: #f1efea;
+  --campo: #ffffff;
   --tinta: #1a1a1a;
-  --tinta-suave: #555;
+  --tinta-suave: #555555;
+  --tinta-media: #555555;
+  --tinta-tenue: #8a857e;
   --linea: #d8d4cd;
   --acento: #c8553d;
+  --acento-suave: #fdf1ee;
+  --bloqueo: #b3261e;
 
   max-width: 19cm;
   margin: 0 auto;
