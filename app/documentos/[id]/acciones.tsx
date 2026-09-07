@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { DocumentoCliente } from "@/lib/documentos/cliente";
 import type { EstadoCrm } from "@/lib/documentos/edicion";
 import Plantilla from "./plantilla";
@@ -37,6 +38,7 @@ export default function Acciones({
   doc,
   precioCalculado,
   puedeEditar,
+  volverA,
   validado,
   validadoAntes,
   versionActual,
@@ -49,6 +51,8 @@ export default function Acciones({
   doc: DocumentoCliente;
   precioCalculado: number | null;
   puedeEditar: boolean;
+  /** Destino del enlace de vuelta. Lo decide el servidor según el alcance. */
+  volverA: string;
   /** La versión que se está viendo está validada. */
   validado: boolean;
   /** Hubo validación, pero de una versión anterior a esta. */
@@ -100,7 +104,13 @@ export default function Acciones({
 
   return (
     <>
-      <div className="no-imprimir mx-auto flex max-w-[19cm] flex-wrap items-center justify-between gap-3 px-6 py-4">
+      <div className="no-imprimir mx-auto max-w-[19cm] px-6 pt-4">
+        <Link href={volverA} className="traza hover:text-accent">
+          ← Volver
+        </Link>
+      </div>
+
+      <div className="no-imprimir mx-auto flex max-w-[19cm] flex-wrap items-center justify-between gap-3 px-6 pt-2 pb-4">
         <div>
           <p className="traza">
             {doc.referencia}

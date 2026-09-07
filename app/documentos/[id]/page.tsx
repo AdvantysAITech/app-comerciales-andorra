@@ -4,6 +4,7 @@ import { construirDocumentoCliente } from "@/lib/documentos/cliente";
 import type { Alcance } from "@/lib/ia/salida";
 import type { Ruta } from "@/lib/domain/rutas";
 import type { EdicionDocumento } from "@/lib/documentos/edicion";
+import { sesionActual } from "@/lib/permisos";
 import Acciones from "./acciones";
 
 export const dynamic = "force-dynamic";
@@ -122,6 +123,20 @@ export default async function VerDocumento({
    * aprobó. Si `ediciones` ha subido desde entonces, lo que hay en pantalla es
    * otra cosa y necesita su propio visto bueno.
    */
+  /**
+   * A dónde vuelve el botón de atrás.
+   *
+   * Esta pantalla vive fuera del grupo `(app)`: su layout no tiene navbar
+   * porque es la vista del cliente, en blanco y lista para imprimir. Sin un
+   * enlace propio, la única salida es el botón del navegador.
+   *
+   * Se decide en servidor y no con `router.back()`: quien abre el documento
+   * desde un enlace pegado no tiene historial al que volver, y el botón se
+   * quedaría muerto o le sacaría de la aplicación.
+   */
+  const sesion = await sesionActual();
+  const volverA = sesion?.alcances.documentos ? "/documentos" : "/leads";
+
   const versionActual = doc.ediciones ?? 0;
   const validado = doc.validado_en !== null && doc.validado_version === versionActual;
 
@@ -136,6 +151,7 @@ export default async function VerDocumento({
       doc={documento}
       precioCalculado={lead.precio_presentado}
       puedeEditar={puedeEditar}
+      volverA={volverA}
       validado={validado}
       validadoAntes={validadoAntes}
       versionActual={versionActual}
