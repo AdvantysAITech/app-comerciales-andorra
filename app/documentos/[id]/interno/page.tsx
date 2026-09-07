@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { sesionActual } from "@/lib/permisos";
@@ -6,6 +7,7 @@ import { versionDe, versionValidada, validadoAntes } from "@/lib/documentos/vers
 import { DEFINICION_RUTA, type Ruta } from "@/lib/domain/rutas";
 import type { Alcance } from "@/lib/ia/salida";
 import BotonValidar from "./boton-validar";
+
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +70,13 @@ export default async function DocumentoInterno({
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
+      <Link
+        href="/documentos"
+        className="traza mb-6 inline-flex items-center gap-1.5 transition-colors hover:text-tinta"
+      >
+        <ArrowLeft className="size-3.5" aria-hidden />
+        Documentos
+      </Link>
       <p className="traza">Documento interno · no se entrega al cliente</p>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">{lead.empresa}</h1>
       <p className="mt-1 text-sm text-tinta-media">

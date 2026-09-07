@@ -61,6 +61,7 @@ export type DatosContacto = {
   empresa: string;
   cargo?: string;
   ciudad?: string;
+  /** ISO-3166-1 alfa-2. Ver `paisIso()`: cualquier otra cosa se descarta. */
   pais?: string;
   web?: string;
   fuente?: string;
@@ -71,10 +72,27 @@ export type DatosContacto = {
   herramientas?: string;
 };
 
+/**
+ * `country` en GoHighLevel solo entiende ISO-3166-1 alfa-2. Lo que no lo sea
+ * lo descarta SIN error, así que un «España» escrito a mano no llega nunca y
+ * el contacto acaba con el país por defecto de la location.
+ *
+ * No se adivina el código a partir del nombre: adivinar es exactamente lo que
+ * hace GHL, y es de donde viene el problema. Si el dato no sirve, se anota en
+ * el log y se trata como si no viniera.
+ */
+function paisIso(pais: string | undefined): string | undefined {
+  if (!pais) return undefined;
+  if (/^[A-Za-z]{2}$/.test(pais)) return pais.toUpperCase();
+  console.warn(`[ghl] país descartado por no ser ISO-2: ${pais}`);
+  return undefined;
+}
+
 export async function upsertContacto(
   d: DatosContacto,
 ): Promise<{ id: string; nuevo: boolean }> {
   const { firstName, lastName } = partirNombre(d.nombre);
+  const pais = paisIso(d.pais);
 
   const res = await ghl<{ contact?: { id: string }; new?: boolean }>("/contacts/upsert", {
     method: "POST",
@@ -88,7 +106,7 @@ export async function upsertContacto(
       companyName: d.empresa,
       website: d.web || undefined,
       city: d.ciudad || undefined,
-      country: d.pais && /^[A-Za-z]{2}$/.test(d.pais) ? d.pais.toUpperCase() : undefined,
+      country: pais,
       // Sin fuente, «App Comercial» a secas. Antes salía «App Comercial ·
       // undefined» en cuanto el campo faltaba.
       source: d.fuente ? `App Comercial · ${d.fuente}` : "App Comercial",
@@ -106,7 +124,31 @@ export async function upsertContacto(
   });
 
   if (!res.contact?.id) throw new Error("GHL no devolvió el id del contacto");
-  return { id: res.contact.id, nuevo: res.new === true };
+  const nuevo = res.new === true;
+
+  /**
+   * GHL rellena `country` con el país de la location —Andorra— cuando el
+   * upsert no lo trae. Como el alta no pregunta el país y este se completa a
+   * mano después en el Sistema Advantys, ese valor por defecto no es un dato
+   * incompleto: es un dato falso que nadie va a corregir, porque parece
+   * correcto. Un campo vacío sí se ve y sí se rellena.
+   *
+   * Solo en contactos NUEVOS. Sobre uno que ya existía, mandar "" borraría el
+   * país que alguien puso a mano, y un alta duplicada no puede deshacer
+   * trabajo hecho en el CRM — es la misma regla que sigue `campo()`.
+   */
+  if (nuevo && !pais) {
+    try {
+      await ghl(`/contacts/${res.contact.id}`, { method: "PUT", body: { country: "" } });
+    } catch (e) {
+      // No es motivo para tumbar el alta: el contacto está creado y el resto
+      // de los datos son correctos. Se queda el país por defecto, que es el
+      // comportamiento que había hasta ahora.
+      console.warn("[ghl] no se pudo vaciar el país del contacto nuevo", e);
+    }
+  }
+
+  return { id: res.contact.id, nuevo };
 }
 
 export async function crearNota(contactoId: string, body: string) {
