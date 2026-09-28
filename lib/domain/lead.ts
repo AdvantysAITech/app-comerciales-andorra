@@ -148,8 +148,9 @@ const base = z.object({
     .pipe(z.union([z.url("Revisa la web"), z.literal("")]))
     .optional(),
   fuente: z.enum(FUENTES, "Indica de dónde viene el lead").optional(),
-  // El idioma no se pregunta pero se sigue mandando con su valor por defecto:
-  // un contacto sin idioma en GHL no recibe bien las secuencias de correo.
+  // El idioma no se pregunta. El formulario ya no manda valor por defecto:
+  // `upsertContacto` pone «Español» solo a los contactos NUEVOS, para no pisar
+  // el idioma de uno que ya existía.
   idioma: z.enum(IDIOMAS, "Selecciona el idioma").optional(),
   sector: z.enum(SECTORES, "Selecciona el sector").optional(),
   empleados: z.enum(EMPLEADOS, "Selecciona el número de empleados").optional(),

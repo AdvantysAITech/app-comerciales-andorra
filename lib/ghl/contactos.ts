@@ -88,6 +88,9 @@ function paisIso(pais: string | undefined): string | undefined {
   return undefined;
 }
 
+/** Etiqueta exacta de la opción en GHL: GHL descarta en silencio cualquier otra. */
+const IDIOMA_POR_DEFECTO = "Español";
+
 export async function upsertContacto(
   d: DatosContacto,
 ): Promise<{ id: string; nuevo: boolean }> {
@@ -137,14 +140,28 @@ export async function upsertContacto(
    * país que alguien puso a mano, y un alta duplicada no puede deshacer
    * trabajo hecho en el CRM — es la misma regla que sigue `campo()`.
    */
-  if (nuevo && !pais) {
+  // Lo mismo, al revés, para el idioma: el alta ya no lo pregunta, y un
+  // contacto sin idioma no entra bien en las secuencias de correo. Por eso a
+  // un contacto NUEVO se le pone «Español» por defecto. A uno que ya existía
+  // no se le toca: antes el formulario mandaba siempre «Español» y pisaba el
+  // idioma que alguien había puesto a mano (28/09/2026).
+  const ponerIdioma = nuevo && !d.idioma;
+
+  if (nuevo && (!pais || ponerIdioma)) {
     try {
-      await ghl(`/contacts/${res.contact.id}`, { method: "PUT", body: { country: "" } });
+      await ghl(`/contacts/${res.contact.id}`, {
+        method: "PUT",
+        body: {
+          ...(!pais ? { country: "" } : {}),
+          ...(ponerIdioma
+            ? { customFields: campo(CAMPO_CONTACTO.idioma_preferido, IDIOMA_POR_DEFECTO) }
+            : {}),
+        },
+      });
     } catch (e) {
       // No es motivo para tumbar el alta: el contacto está creado y el resto
-      // de los datos son correctos. Se queda el país por defecto, que es el
-      // comportamiento que había hasta ahora.
-      console.warn("[ghl] no se pudo vaciar el país del contacto nuevo", e);
+      // de los datos son correctos.
+      console.warn("[ghl] no se pudo ajustar país/idioma del contacto nuevo", e);
     }
   }
 

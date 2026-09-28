@@ -77,7 +77,7 @@ type Campos = {
 
 const VACIO: Campos = {
   nombre: "", email: "", telefono: "", empresa: "", cargo: "", ciudad: "", pais: "",
-  web: "", fuente: "", idioma: "es", sector: "", empleados: "", facturacion: "",
+  web: "", fuente: "", idioma: "", sector: "", empleados: "", facturacion: "",
   herramientas: "", valorEstimado: "", notas: "",
 };
 
@@ -152,7 +152,10 @@ export default function FormularioLead({
     inicial.paso ? Math.max(0, pasosDe(inicial.ruta ?? null).findIndex((p) => p.id === inicial.paso)) : 0,
   );
 
-  const [campos, setCampos] = useState<Campos>({ ...VACIO, ...(inicial.campos ?? {}) });
+  // `idioma` se descarta del borrador: ya no se pregunta, así que lo que traiga
+  // un borrador antiguo es el "es" por defecto, no una respuesta. Mandarlo
+  // pisaría el idioma de un contacto que ya existe en GHL.
+  const [campos, setCampos] = useState<Campos>({ ...VACIO, ...(inicial.campos ?? {}), idioma: "" });
   const [arbol, setArbol] = useState<RespuestasArbol>(inicial.arbol ?? {});
   const [ruta, setRuta] = useState<Ruta | null>(inicial.ruta ?? null);
   const [spinoffClave, setSpinoffClave] = useState(inicial.spinoffClave ?? "");
@@ -250,6 +253,25 @@ export default function FormularioLead({
     if (nueva && !requiereSpinoff(nueva)) setSpinoffClave("");
   }
 
+  /**
+   * R6.2 y R6.3 comparten id en las cuatro verticales, pero no opciones ni
+   * significado: el «colegio» de Educación no es un tipo de organización de
+   * Agro. Al cambiar de spin-off se borran solo esas dos; el resto del
+   * checklist de la RUTA 6 es común y se conserva.
+   */
+  function cambiarSpinoff(nueva: string) {
+    if (nueva !== spinoffClave) {
+      setChecklist((c) => {
+        if (!("R6.2" in c) && !("R6.3" in c)) return c;
+        const resto = { ...c };
+        delete resto["R6.2"];
+        delete resto["R6.3"];
+        return resto;
+      });
+    }
+    setSpinoffClave(nueva);
+  }
+
   /* ---------------- Navegación ---------------- */
 
   /**
@@ -266,6 +288,7 @@ export default function FormularioLead({
     ciudad: campos.ciudad || undefined,
     pais: campos.pais || undefined,
     fuente: campos.fuente || undefined,
+    idioma: campos.idioma || undefined,
     sector: campos.sector || undefined,
     empleados: campos.empleados || undefined,
     facturacion: campos.facturacion || undefined,
@@ -612,7 +635,10 @@ export default function FormularioLead({
         actual={paso}
         alcanzado={alcanzado}
         conError={pasosConError}
-        onIr={setPaso}
+        // `irA` y no `setPaso`: hacia delante valida y aplica el reencaminado
+        // de R4.1, igual que «Continuar». Con `setPaso` la barra se saltaba
+        // las dos cosas y dejaba llegar a Revisión un checklist sin validar.
+        onIr={irA}
       />
 
       {aviso && (
@@ -681,7 +707,7 @@ export default function FormularioLead({
                 ) : (
                   <select id="spinoff" className="campo" value={spinoffClave}
                     aria-invalid={errores.spinoffClave ? "true" : undefined}
-                    onChange={(e) => setSpinoffClave(e.target.value)}>
+                    onChange={(e) => cambiarSpinoff(e.target.value)}>
                     <option value="">Selecciona la spin-off…</option>
                     {spinoffs.map((s) => (
                       <option key={s.clave} value={s.clave}>{s.nombre}</option>
@@ -947,7 +973,7 @@ export default function FormularioLead({
             // porque no sabe contestarlo — pero significa que `arbol` puede
             // llegar vacío al servidor, y por eso allí no es obligatorio.
             fijarRuta(s.ruta, {});
-            if (s.spinoffClave) setSpinoffClave(s.spinoffClave);
+            if (s.spinoffClave) cambiarSpinoff(s.spinoffClave);
             setSugerido(true);
             setMostrarAsistente(false);
           }}
