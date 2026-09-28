@@ -38,13 +38,26 @@ export async function POST(
     .maybeSingle();
 
   if (errorLead) {
+    // El detalle se queda en el log: el error de Postgres lleva nombres de
+    // columnas y políticas que no le dicen nada al comercial y sí a un curioso.
     console.error("[documento] select de lead falló", errorLead);
     return NextResponse.json(
-      { error: `No se pudo leer el lead: ${JSON.stringify(errorLead)}` },
+      { error: "No se pudo leer el lead. Inténtalo de nuevo en unos minutos." },
       { status: 500 },
     );
   }
 
+  /**
+   * ESTA lectura es la autorización, y va antes de la llamada a la IA.
+   *
+   * Se hace con el cliente del USUARIO: la política `leads_select` solo le
+   * devuelve el lead si es suyo o si tiene alcance equipo/total en
+   * `captacion`. Si no lo ve, no genera. Antes la puerta real era el INSERT
+   * del documento, que exige `comercial_id = auth.uid()`: un responsable que
+   * generaba sobre el lead de alguien de su equipo pagaba los 45 s de IA y
+   * luego se estrellaba contra la RLS. Por eso el INSERT de abajo va con la
+   * service_role key y el dueño sigue siendo el comercial del lead.
+   */
   if (!lead) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
   // Un lead que no llegó a crearse en GHL no tiene alcance que documentar.
@@ -90,9 +103,12 @@ export async function POST(
   // guardado bajo una versión de tarifas anterior.
   const calculo = calcularPrecio({ ruta, respuestas: conContexto });
 
-  const bant = calcularBant(
-    (lead.bant_score !== null ? {} : {}) as RespuestasBant,
-  );
+  // La fila del lead solo guarda el total (`bant_score`), no las respuestas
+  // criterio a criterio, así que la IA recibe el BANT vacío: sin detalle de
+  // presupuesto, autoridad, necesidad ni plazos. No se reconstruye nada a
+  // partir del total; inventarse respuestas sería peor que no tenerlas.
+  const sinRespuestasBant: RespuestasBant = {};
+  const bant = calcularBant(sinRespuestasBant);
 
   const entrada = construirEntrada({
     ruta,
@@ -113,7 +129,12 @@ export async function POST(
   try {
     const resultado = await generarAlcance({ ruta, respuestas: conContexto, entrada, calculo });
 
-    const { data: doc, error } = await supabase
+    // Service_role: la autorización ya se decidió al leer el lead (arriba).
+    // Con el cliente del usuario, `documentos_insert` rechazaría a quien
+    // genera sobre un lead ajeno con alcance equipo/total.
+    const admin = createAdminClient();
+
+    const { data: doc, error } = await admin
       .from("documentos")
       .insert({
         lead_id: lead.id,
@@ -140,8 +161,10 @@ export async function POST(
     // Los motivos de revisión que aporta la IA (confianza baja, desviación del
     // baseline) se suman a los que ya venían del cálculo de precio: el estado
     // final del presupuesto lo deciden los dos juntos, no solo el importe.
+    // También con service_role: `leads_update` solo deja tocar los leads
+    // propios, y para un responsable este UPDATE salía de cero filas sin error.
     if (resultado.motivosExtra.length > 0) {
-      await supabase
+      await admin
         .from("leads")
         .update({
           estado_presupuesto: "revision_obligatoria",

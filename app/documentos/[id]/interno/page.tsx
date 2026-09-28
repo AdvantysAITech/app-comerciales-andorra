@@ -218,7 +218,7 @@ export default async function DocumentoInterno({
           <Link href={`/documentos/${id}`} className="boton-fantasma">
             Ver y modificar la propuesta
           </Link>
-          {!validada && <BotonValidar id={id} />}
+          {!validada && <BotonValidar id={id} version={version} />}
         </div>
       </div>
     </div>

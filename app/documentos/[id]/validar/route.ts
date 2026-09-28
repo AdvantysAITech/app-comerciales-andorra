@@ -45,6 +45,23 @@ export async function POST(
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }
 
+  // La versión que el validador tenía delante. Es obligatoria: sin ella se
+  // validaba la que hubiera en la fila al llegar la petición, y si el
+  // comercial había guardado una edición mientras tanto se aprobaba y se
+  // subía al CRM un texto que nadie había revisado.
+  let vista: unknown;
+  try {
+    vista = ((await request.json()) as { version?: unknown } | null)?.version;
+  } catch {
+    vista = undefined;
+  }
+  if (typeof vista !== "number" || !Number.isInteger(vista) || vista < 0) {
+    return NextResponse.json(
+      { error: "Falta la versión que estás validando. Recarga la página y vuelve a intentarlo." },
+      { status: 400 },
+    );
+  }
+
   const admin = createAdminClient();
 
   const { data: doc } = await admin
@@ -59,6 +76,18 @@ export async function POST(
 
   const version = versionDe(doc.ediciones);
 
+  const cambiada = () =>
+    NextResponse.json(
+      {
+        error:
+          `La propuesta ha cambiado desde que la abriste (estabas viendo la v${vista}). ` +
+          "Recarga la página y revisa la versión nueva antes de validar.",
+      },
+      { status: 409 },
+    );
+
+  if (vista !== version) return cambiada();
+
   // Ya validada esta misma versión: no se vuelve a escribir `validado_en`
   // —falsearía la fecha— pero sí se reintenta la subida, que es lo único que
   // puede haber fallado si alguien vuelve a darle al botón.
@@ -67,7 +96,12 @@ export async function POST(
     return NextResponse.json({ ok: true, version, yaEstaba: true, crm });
   }
 
-  const { error } = await admin
+  // UPDATE condicionado a que `ediciones` siga siendo la que se ha leído. Entre
+  // la lectura de arriba y esta línea puede entrar una edición; sin la
+  // condición, se marcaría validada una versión que el validador no ha visto.
+  // `ediciones` null (documento nunca editado) necesita `is`, porque
+  // `eq(null)` en SQL no casa con nada.
+  const actualizacion = admin
     .from("documentos")
     .update({
       validado_por: sesion.usuario.id,
@@ -76,10 +110,21 @@ export async function POST(
     })
     .eq("id", id);
 
+  const { data: marcada, error } = await (
+    doc.ediciones === null
+      ? actualizacion.is("ediciones", null)
+      : actualizacion.eq("ediciones", doc.ediciones)
+  )
+    .select("id")
+    .maybeSingle();
+
   if (error) {
     console.error("[validar] no se pudo marcar como validada", error);
     return NextResponse.json({ error: "No se pudo validar el documento." }, { status: 500 });
   }
+
+  // Cero filas: alguien ha guardado una edición justo ahora.
+  if (!marcada) return cambiada();
 
   // La subida es «best effort», igual que antes: si GHL está caído, la
   // propuesta se queda validada y el error queda en `ghl_error` con el botón

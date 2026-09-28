@@ -73,7 +73,7 @@ export async function PATCH(
 
   const { data: doc } = await supabase
     .from("documentos")
-    .select("id, lead_id, alcance, edicion, precio_editado, pdf_ruta, ediciones")
+    .select("id, lead_id, alcance, edicion, precio_editado, pdf_ruta, ediciones, ghl_error")
     .eq("id", id)
     .maybeSingle();
 
@@ -97,7 +97,12 @@ export async function PATCH(
   /* 3. Guardado · aquí se comprueba el permiso                        */
   /* ---------------------------------------------------------------- */
 
-  const { data: guardado, error: errorGuardado } = await supabase
+  // Compare-and-swap sobre `ediciones`: solo se guarda si nadie ha guardado
+  // otra versión desde la lectura de arriba. Sin esto, dos ediciones a la vez
+  // escribían las dos la misma `version`, la segunda pisaba a la primera sin
+  // aviso y el historial quedaba con dos entradas para un solo número.
+  // `ediciones` null (nunca editado) necesita `is`: `eq(null)` no casa con nada.
+  const actualizacion = supabase
     .from("documentos")
     .update({
       edicion,
@@ -106,7 +111,13 @@ export async function PATCH(
       editado_en: new Date().toISOString(),
       ediciones: version,
     })
-    .eq("id", id)
+    .eq("id", id);
+
+  const { data: guardado, error: errorGuardado } = await (
+    doc.ediciones === null
+      ? actualizacion.is("ediciones", null)
+      : actualizacion.eq("ediciones", doc.ediciones)
+  )
     .select("id")
     .maybeSingle();
 
@@ -118,8 +129,24 @@ export async function PATCH(
     );
   }
 
-  // Fila legible pero no actualizable: la RLS la ha filtrado en el UPDATE.
+  // Cero filas puede ser dos cosas muy distintas: que otro haya guardado entre
+  // medias (la condición de `ediciones` ya no casa) o que la RLS no le deje
+  // modificarla. Se relee para no decirle «no tienes permiso» a quien solo
+  // ha llegado tarde, ni «recarga» a quien nunca podrá guardar.
   if (!guardado) {
+    const { data: ahora } = await supabase
+      .from("documentos")
+      .select("ediciones")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (ahora && ahora.ediciones !== doc.ediciones) {
+      return NextResponse.json(
+        { error: "La propuesta ha cambiado mientras la editabas; recarga y vuelve a intentarlo." },
+        { status: 409 },
+      );
+    }
+
     return NextResponse.json(
       { error: "No tienes permiso para modificar esta propuesta." },
       { status: 403 },
@@ -247,6 +274,24 @@ export async function PATCH(
       .from("documentos")
       .update({ pdf_ruta: rutaStorage, pdf_generado_en: new Date().toISOString() })
       .eq("id", id);
+
+    // Si una edición anterior no pudo regenerar o guardar el PDF, el aviso se
+    // quedaba en `ghl_error` para siempre aunque este PDF ya esté bien. Solo
+    // se borran los mensajes que escribe esta ruta; un fallo de subida al CRM
+    // es otra cosa y se queda. El `eq` sobre el mensaje leído evita borrar uno
+    // que haya escrito la validación entre medias.
+    const errorPrevio = doc.ghl_error;
+    if (
+      errorPrevio &&
+      (errorPrevio.startsWith("No se pudo regenerar el PDF") ||
+        errorPrevio.startsWith("No se pudo guardar el PDF"))
+    ) {
+      await admin
+        .from("documentos")
+        .update({ ghl_error: null })
+        .eq("id", id)
+        .eq("ghl_error", errorPrevio);
+    }
   }
 
   /* ---------------------------------------------------------------- */

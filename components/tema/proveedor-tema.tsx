@@ -41,6 +41,29 @@ function preferenciaDelSistema(): "claro" | "oscuro" {
     : "claro";
 }
 
+/**
+ * localStorage puede LANZAR, no solo devolver null: con las cookies de terceros
+ * bloqueadas, en algunos modos privados o con la política de la empresa, el
+ * mero acceso tira un SecurityError. Sin el try, eso tumbaba la aplicación
+ * entera por una preferencia de colores. Si no hay almacenamiento, se sigue al
+ * sistema y el cambio de tema dura lo que dure la pestaña.
+ */
+function leerGuardado(): string | null {
+  try {
+    return window.localStorage.getItem(CLAVE_TEMA);
+  } catch {
+    return null;
+  }
+}
+
+function guardar(tema: Tema): void {
+  try {
+    window.localStorage.setItem(CLAVE_TEMA, tema);
+  } catch {
+    // Sin almacenamiento no se recuerda entre visitas; el tema se aplica igual.
+  }
+}
+
 function aplicar(tema: Tema): "claro" | "oscuro" {
   const resuelto = tema === "sistema" ? preferenciaDelSistema() : tema;
   document.documentElement.classList.toggle("dark", resuelto === "oscuro");
@@ -55,7 +78,7 @@ export function ProveedorTema({ children }: { children: React.ReactNode }) {
   const [resuelto, setResuelto] = useState<"claro" | "oscuro">("claro");
 
   useEffect(() => {
-    const guardado = window.localStorage.getItem(CLAVE_TEMA) as Tema | null;
+    const guardado = leerGuardado();
     const inicial: Tema =
       guardado === "claro" || guardado === "oscuro" || guardado === "sistema"
         ? guardado
@@ -75,7 +98,7 @@ export function ProveedorTema({ children }: { children: React.ReactNode }) {
   }, [tema]);
 
   const setTema = useCallback((nuevo: Tema) => {
-    window.localStorage.setItem(CLAVE_TEMA, nuevo);
+    guardar(nuevo);
     setTemaEstado(nuevo);
     setResuelto(aplicar(nuevo));
   }, []);

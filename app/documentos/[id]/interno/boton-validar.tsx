@@ -16,7 +16,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function BotonValidar({ id }: { id: string }) {
+/**
+ * `version` es la que se está pintando en la ficha interna. Viaja en el POST
+ * para que la ruta valide ESA y no la que haya en la fila cuando llegue la
+ * petición: si el comercial edita mientras se revisa, la ruta responde 409 en
+ * vez de aprobar un texto que nadie ha leído.
+ */
+export default function BotonValidar({ id, version }: { id: string; version: number }) {
   const router = useRouter();
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +31,11 @@ export default function BotonValidar({ id }: { id: string }) {
     setEnviando(true);
     setError(null);
     try {
-      const res = await fetch(`/documentos/${id}/validar`, { method: "POST" });
+      const res = await fetch(`/documentos/${id}/validar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version }),
+      });
 
       // Si la respuesta no es JSON (404 de Next, error de proxy), `json()`
       // lanza. Se lee como texto y se decide, en vez de dejar que el catch
