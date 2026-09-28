@@ -11,6 +11,11 @@
  * No pide confirmación a propósito. La operación no destruye nada: marca
  * `eliminado_en` en lo que GHL dice que ya no existe, y una marca puesta por
  * error se quita con una fecha a null.
+ *
+ * La única confirmación es la del freno: si demasiados leads dan 404 de
+ * golpe, el servidor no marca ninguno y devuelve cuáles son. Aquí se enseñan
+ * y, si de verdad se borraron en el CRM, «Sí, están borrados» relanza la
+ * comprobación con `forzar`. Esa segunda pasada vuelve a preguntar a GHL.
  */
 
 import { useState } from "react";
@@ -22,6 +27,8 @@ type Resultado = {
   omitidos: number;
   borradores: { comprobados: number; eliminados: number };
   abortado: string | null;
+  frenado: boolean;
+  pendientes: { id: string; empresa: string | null }[];
 };
 
 export default function BotonSincronizar() {
@@ -29,14 +36,20 @@ export default function BotonSincronizar() {
   const [trabajando, setTrabajando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [problema, setProblema] = useState(false);
+  const [pendientes, setPendientes] = useState<Resultado["pendientes"]>([]);
 
-  async function sincronizar() {
+  async function sincronizar(forzar = false) {
     setTrabajando(true);
     setAviso(null);
     setProblema(false);
+    setPendientes([]);
 
     try {
-      const res = await fetch("/api/leads/sincronizar-crm", { method: "POST" });
+      const res = await fetch("/api/leads/sincronizar-crm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ forzar }),
+      });
 
       // Si no es JSON —un 405, un 502 del proxy— `json()` lanza y el catch
       // culparía a la conexión, que es lo que despistó con el botón de
@@ -60,6 +73,7 @@ export default function BotonSincronizar() {
       if (datos.abortado) {
         setProblema(true);
         setAviso(datos.abortado);
+        if (datos.frenado && datos.pendientes?.length) setPendientes(datos.pendientes);
       } else {
         const b = datos.borradores;
         setAviso(
@@ -81,13 +95,30 @@ export default function BotonSincronizar() {
 
   return (
     <div className="flex flex-col items-end gap-2">
-      <button className="boton-fantasma" onClick={sincronizar} disabled={trabajando}>
+      <button className="boton-fantasma" onClick={() => sincronizar()} disabled={trabajando}>
         {trabajando ? "Comprobando…" : "Actualizar desde CRM"}
       </button>
       {aviso && (
         <p className="traza max-w-md text-right normal-case" data-error={problema ? "true" : undefined}>
           {aviso}
         </p>
+      )}
+      {pendientes.length > 0 && (
+        <div className="flex max-w-md flex-col items-end gap-2">
+          <ul className="traza text-right normal-case">
+            {pendientes.map((p) => (
+              <li key={p.id}>{p.empresa || "Sin empresa"}</li>
+            ))}
+          </ul>
+          <div className="flex gap-2">
+            <button className="boton-fantasma" onClick={() => setPendientes([])} disabled={trabajando}>
+              Revisar primero
+            </button>
+            <button className="boton-fantasma" onClick={() => sincronizar(true)} disabled={trabajando}>
+              Sí, están borrados
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

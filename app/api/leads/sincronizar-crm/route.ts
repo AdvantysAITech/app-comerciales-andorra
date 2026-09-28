@@ -38,8 +38,18 @@ export async function POST(request: Request) {
     }
   }
 
+  // `forzar` salta el freno del porcentaje tras confirmarlo una persona desde
+  // el botón. Solo se acepta con sesión: el cron no confirma nada, y si GHL
+  // empieza a devolver 404 de madrugada, el freno tiene que actuar.
+  let forzar = false;
+  if (!esCron) {
+    const cuerpo = (await request.json().catch(() => null)) as { forzar?: unknown } | null;
+    forzar = cuerpo?.forzar === true;
+  }
+
   try {
-    const resultado = await sincronizarLeadsConCrm();
+    const resultado = await sincronizarLeadsConCrm({ forzar });
+    if (forzar) console.warn("[sync-leads] freno saltado con confirmación manual");
 
     if (resultado.abortado) {
       console.error("[sync-leads] ejecución abortada", resultado.abortado);

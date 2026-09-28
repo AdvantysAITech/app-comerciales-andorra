@@ -27,11 +27,25 @@
  *
  * ── El freno ─────────────────────────────────────────────────────────────
  *
- * Si en una pasada más de `UMBRAL_ABORTO` de los comprobados sale 404, se
- * aborta sin escribir. Que se borre de golpe un tercio de la cartera es
- * improbable; que GHL cambie el comportamiento de un endpoint y empiece a
- * devolver 404 donde antes devolvía otra cosa, no tanto. El freno convierte
- * ese día malo en un aviso en vez de en una pérdida de datos.
+ * Si en una pasada más de `UMBRAL_ABORTO` de los leads ACTIVOS comprobados
+ * sale 404 por primera vez, no se marca ninguno. Que se borre de golpe un
+ * tercio de la cartera es improbable; que GHL cambie el comportamiento de un
+ * endpoint y empiece a devolver 404 donde antes devolvía otra cosa, no tanto.
+ * El freno convierte ese día malo en un aviso en vez de en una pérdida de
+ * datos.
+ *
+ * Tres reglas del freno, aprendidas el 28/09/2026 (9 de 12 leads de prueba
+ * borrados en GHL y el botón bloqueado sin salida):
+ *
+ *  1. Solo cuentan los 404 NUEVOS sobre leads activos. Un lead ya marcado que
+ *     sigue dando 404 no es noticia: si contara, en una cartera pequeña con
+ *     leads de prueba borrados el freno saltaría todos los días para siempre.
+ *  2. El freno corta la ESCRITURA sobre `leads`, no la ejecución: los
+ *     borradores se comprueban igual. Son otra tabla y otro problema.
+ *  3. Una persona puede confirmarlo. Si el freno salta desde el botón, se
+ *     devuelve la lista de empresas afectadas y el botón ofrece «Sí, están
+ *     borrados». Esa segunda pasada vuelve a preguntar a GHL —no se fía de la
+ *     primera— y solo se salta el porcentaje. El cron nunca fuerza.
  */
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -54,6 +68,9 @@ const PAUSA_MS = 120;
 
 const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Lead que ha dado 404 por primera vez y el freno ha dejado sin marcar. */
+export type Pendiente = { id: string; empresa: string | null };
+
 export type ResultadoSync = {
   comprobados: number;
   eliminados: number;
@@ -64,6 +81,12 @@ export type ResultadoSync = {
   borradores: { comprobados: number; eliminados: number };
   /** Motivo por el que se cortó, si se cortó. Null = ejecución completa. */
   abortado: string | null;
+  /** True si saltó el freno del porcentaje: los leads no se han marcado,
+   *  pero se puede confirmar a mano con `forzar`. */
+  frenado: boolean;
+  /** Con el freno: los leads que se habrían marcado, para enseñárselos a
+   *  quien tenga que confirmarlo. Vacío en cualquier otro caso. */
+  pendientes: Pendiente[];
 };
 
 type Estado = "vivo" | "no_existe" | "omitido";
@@ -94,7 +117,10 @@ async function comprobar(ruta: string): Promise<Estado> {
   }
 }
 
-export async function sincronizarLeadsConCrm(): Promise<ResultadoSync> {
+export async function sincronizarLeadsConCrm(
+  opciones: { forzar?: boolean } = {},
+): Promise<ResultadoSync> {
+  const { forzar = false } = opciones;
   const admin = createAdminClient();
 
   // Solo los que llegaron a existir en GHL. Un lead con `resultado = 'error'`
@@ -102,7 +128,7 @@ export async function sincronizarLeadsConCrm(): Promise<ResultadoSync> {
   // borrado: sería mentir sobre lo que pasó.
   const { data, error } = await admin
     .from("leads")
-    .select("id, ghl_oportunidad_id, ghl_contacto_id, eliminado_en")
+    .select("id, empresa, ghl_oportunidad_id, ghl_contacto_id, eliminado_en")
     .eq("resultado", "creado")
     .order("comprobado_en", { ascending: true, nullsFirst: true })
     .limit(POR_EJECUCION);
@@ -141,6 +167,8 @@ export async function sincronizarLeadsConCrm(): Promise<ResultadoSync> {
         omitidos,
         borradores: { comprobados: 0, eliminados: 0 },
         abortado: e instanceof Error ? e.message : "Error desconocido",
+        frenado: false,
+        pendientes: [],
       };
     }
 
@@ -155,39 +183,40 @@ export async function sincronizarLeadsConCrm(): Promise<ResultadoSync> {
 
   /* --- Freno -------------------------------------------------------- */
 
-  if (
-    comprobados >= MINIMO_PARA_FRENO &&
-    noExisten.length / comprobados > UMBRAL_ABORTO
-  ) {
-    return {
-      comprobados,
-      eliminados: 0,
-      restaurados: 0,
-      omitidos,
-      borradores: { comprobados: 0, eliminados: 0 },
-      abortado:
-        `${noExisten.length} de ${comprobados} leads han devuelto 404, más del ` +
-        `${Math.round(UMBRAL_ABORTO * 100)}% permitido. No se ha marcado ninguno. ` +
-        `Comprueba a mano si de verdad se han borrado en el CRM antes de volver a lanzarlo.`,
-    };
-  }
+  // Se separan los 404 nuevos de los que ya estaban marcados. Solo los nuevos
+  // son una novedad que pueda indicar un fallo de GHL, y solo los activos
+  // forman la cartera sobre la que se mide el porcentaje.
+  const marcadoAntes = new Set(leads.filter((l) => l.eliminado_en !== null).map((l) => l.id));
+  const nuevos404 = noExisten.filter((id) => !marcadoAntes.has(id));
+  const siguenBorrados = noExisten.filter((id) => marcadoAntes.has(id));
+  const activosComprobados = comprobados - siguenBorrados.length;
+
+  const frenado =
+    !forzar &&
+    activosComprobados >= MINIMO_PARA_FRENO &&
+    nuevos404.length / activosComprobados > UMBRAL_ABORTO;
 
   /* --- Escritura ---------------------------------------------------- */
 
-  if (noExisten.length > 0) {
+  if (!frenado && nuevos404.length > 0) {
     await admin
       .from("leads")
       .update({ eliminado_en: ahora, comprobado_en: ahora })
-      .in("id", noExisten);
+      .in("id", nuevos404);
+  }
+
+  // Los que ya estaban marcados y siguen sin existir: solo se apunta que se
+  // han mirado, para que la cola rote. La fecha de borrado no se toca.
+  if (siguenBorrados.length > 0) {
+    await admin.from("leads").update({ comprobado_en: ahora }).in("id", siguenBorrados);
   }
 
   // Los vivos se marcan como comprobados. Y si alguno estaba marcado como
   // eliminado, se le quita la marca: no debería pasar —los ids de GHL no se
   // reutilizan— pero si una ejecución anterior se equivocó, la siguiente lo
-  // corrige sola en vez de dejarlo enterrado para siempre.
-  const restaurados = leads.filter(
-    (l) => l.eliminado_en !== null && vivos.includes(l.id),
-  ).length;
+  // corrige sola en vez de dejarlo enterrado para siempre. Esto se hace
+  // también con el freno puesto: quitar una marca nunca hace daño.
+  const restaurados = vivos.filter((id) => marcadoAntes.has(id)).length;
 
   if (vivos.length > 0) {
     await admin
@@ -195,6 +224,19 @@ export async function sincronizarLeadsConCrm(): Promise<ResultadoSync> {
       .update({ eliminado_en: null, comprobado_en: ahora })
       .in("id", vivos);
   }
+
+  const pendientes: Pendiente[] = frenado
+    ? leads
+        .filter((l) => nuevos404.includes(l.id))
+        .map((l) => ({ id: l.id, empresa: l.empresa ?? null }))
+    : [];
+
+  const avisoFreno = frenado
+    ? `${nuevos404.length} de ${activosComprobados} leads activos han devuelto 404, ` +
+      `más del ${Math.round(UMBRAL_ABORTO * 100)}% permitido, así que no se ha ` +
+      `marcado ninguno por precaución. Si los has borrado tú en el CRM, confírmalo ` +
+      `y se marcarán.`
+    : null;
 
   /* --- Borradores ---------------------------------------------------- */
 
@@ -206,11 +248,17 @@ export async function sincronizarLeadsConCrm(): Promise<ResultadoSync> {
 
   return {
     comprobados: comprobados + borradores.comprobados,
-    eliminados: noExisten.length + borradores.eliminados,
+    eliminados: (frenado ? 0 : nuevos404.length) + borradores.eliminados,
     restaurados,
     omitidos: omitidos + borradores.omitidos,
     borradores: { comprobados: borradores.comprobados, eliminados: borradores.eliminados },
-    abortado: borradores.abortado,
+    // Credenciales manda sobre el freno: si el token falló en los
+    // borradores, eso es lo primero que hay que arreglar.
+    abortado: borradores.abortado ?? avisoFreno,
+    // Con un fallo de credenciales no se ofrece confirmar: esa pasada
+    // forzada también fallaría.
+    frenado: frenado && !borradores.abortado,
+    pendientes: borradores.abortado ? [] : pendientes,
   };
 }
 
