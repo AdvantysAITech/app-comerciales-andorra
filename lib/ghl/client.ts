@@ -26,6 +26,33 @@ function env(name: string): string {
 
 export const locationId = () => env("GHL_LOCATION_ID");
 
+/**
+ * Tiempo máximo por llamada. Sin límite, un GHL colgado deja la petición
+ * esperando hasta que Vercel mata la función por `maxDuration`, y eso corta
+ * también lo que venía detrás: en la sincronización nocturna, las escrituras
+ * de todo lo que ya se había comprobado.
+ *
+ * Cada intento tiene su propio límite, así que con el reintento del 429 el
+ * peor caso es algo más del doble.
+ */
+const LIMITE_MS = 15_000;
+
+/** Las subidas llevan un PDF: se les da más margen que a una llamada JSON. */
+const LIMITE_SUBIDA_MS = 30_000;
+
+/**
+ * Traduce el corte por tiempo a un mensaje legible. Se lanza como `Error`
+ * normal, NO como `GhlError`: no hay status que interpretar, y quien distingue
+ * por status —la sincronización, que marca borrados con el 404— tiene que
+ * tratarlo como un fallo transitorio, no como una respuesta de GHL.
+ */
+function traducirCorte(e: unknown, etiqueta: string, ms: number): unknown {
+  if (e instanceof Error && e.name === "TimeoutError") {
+    return new Error(`${etiqueta} no respondió en ${ms / 1000} s`);
+  }
+  return e;
+}
+
 type Opciones = {
   method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: unknown;
@@ -33,10 +60,12 @@ type Opciones = {
   version?: string;
   /** Segundos de caché para GET. 0 = sin caché. */
   revalidate?: number;
+  /** Límite por intento, en ms. Por defecto `LIMITE_MS`. */
+  timeoutMs?: number;
 };
 
 export async function ghl<T = unknown>(path: string, opciones: Opciones = {}): Promise<T> {
-  const { method = "GET", body, query, version, revalidate = 0 } = opciones;
+  const { method = "GET", body, query, version, revalidate = 0, timeoutMs = LIMITE_MS } = opciones;
 
   const url = new URL(BASE + path);
   for (const [clave, valor] of Object.entries(query ?? {})) {
@@ -53,6 +82,8 @@ export async function ghl<T = unknown>(path: string, opciones: Opciones = {}): P
         ...(body ? { "Content-Type": "application/json" } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
+      // La señal cubre también la lectura del cuerpo, no solo las cabeceras.
+      signal: AbortSignal.timeout(timeoutMs),
       ...(method === "GET"
         ? revalidate > 0
           ? { next: { revalidate } }
@@ -60,15 +91,22 @@ export async function ghl<T = unknown>(path: string, opciones: Opciones = {}): P
         : {}),
     });
 
-  let res = await lanzar();
-
-  // GHL limita por ráfagas. Un reintento con espera corta cubre el caso normal.
-  if (res.status === 429) {
-    await new Promise((r) => setTimeout(r, 1200));
+  let res: Response;
+  let texto: string;
+  try {
     res = await lanzar();
+
+    // GHL limita por ráfagas. Un reintento con espera corta cubre el caso normal.
+    if (res.status === 429) {
+      await new Promise((r) => setTimeout(r, 1200));
+      res = await lanzar();
+    }
+
+    texto = await res.text();
+  } catch (e) {
+    throw traducirCorte(e, `GHL ${method} ${path}`, timeoutMs);
   }
 
-  const texto = await res.text();
   let payload: unknown;
   try {
     payload = texto ? JSON.parse(texto) : null;
@@ -110,16 +148,24 @@ export async function ghlSubida<T = unknown>(
         Accept: "application/json",
       },
       body: formData,
+      signal: AbortSignal.timeout(LIMITE_SUBIDA_MS),
     });
 
-  let res = await lanzar();
-
-  if (res.status === 429) {
-    await new Promise((r) => setTimeout(r, 1200));
+  let res: Response;
+  let texto: string;
+  try {
     res = await lanzar();
+
+    if (res.status === 429) {
+      await new Promise((r) => setTimeout(r, 1200));
+      res = await lanzar();
+    }
+
+    texto = await res.text();
+  } catch (e) {
+    throw traducirCorte(e, `GHL POST ${path}`, LIMITE_SUBIDA_MS);
   }
 
-  const texto = await res.text();
   let payload: unknown;
   try {
     payload = texto ? JSON.parse(texto) : null;

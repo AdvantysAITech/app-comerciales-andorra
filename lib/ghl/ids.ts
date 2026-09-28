@@ -53,7 +53,8 @@ export const PIPELINES = {
       { id: "6b743753-ea21-42b3-852f-fb5a543ff9f2", nombre: "Prospecto Identificado", entrada: true },
       { id: "b53dfb5c-6dd8-4afe-bda8-5e121589760a", nombre: "Primer Contacto", entrada: true },
       { id: "756bf1eb-f7fe-4803-bf60-c629de6f09a0", nombre: "Presentación de Business Case", entrada: true },
-      { id: "fbe69830-80d9-47b4-b330-dfe8ccf5050e", nombre: "Due Diligence", entrada: true },
+      // «Due Diligence» ya no existe en este pipeline. ghl-discovery.json es
+      // una foto anterior y todavía la lista: no reañadirla desde ahí.
       { id: "41e1a030-858f-4e4b-bfa1-950fe598756c", nombre: "Compromiso de Inversión", entrada: true },
       { id: "73d8dd32-6a9a-4933-92f4-c41b739beeb3", nombre: "Capital Desembolsado", entrada: true },
       { id: "37aff143-2aa2-439b-9295-127249129697", nombre: "Cerrado Ganado", entrada: false },

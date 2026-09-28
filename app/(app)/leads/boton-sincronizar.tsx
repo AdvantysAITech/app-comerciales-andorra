@@ -15,7 +15,9 @@
  * La única confirmación es la del freno: si demasiados leads dan 404 de
  * golpe, el servidor no marca ninguno y devuelve cuáles son. Aquí se enseñan
  * y, si de verdad se borraron en el CRM, «Sí, están borrados» relanza la
- * comprobación con `forzar`. Esa segunda pasada vuelve a preguntar a GHL.
+ * comprobación con `forzar` y los ids de esa lista, no un «sí» en blanco: el
+ * servidor solo marca lo que se vio aquí. Esa segunda pasada vuelve a
+ * preguntar a GHL.
  */
 
 import { useState } from "react";
@@ -25,6 +27,7 @@ type Resultado = {
   comprobados: number;
   eliminados: number;
   omitidos: number;
+  aplazados: number;
   borradores: { comprobados: number; eliminados: number };
   abortado: string | null;
   frenado: boolean;
@@ -38,7 +41,9 @@ export default function BotonSincronizar() {
   const [problema, setProblema] = useState(false);
   const [pendientes, setPendientes] = useState<Resultado["pendientes"]>([]);
 
-  async function sincronizar(forzar = false) {
+  /** `confirmados`: los ids de la lista que se está enseñando. Solo se pasan
+   *  desde «Sí, están borrados»; sin ellos es una comprobación normal. */
+  async function sincronizar(confirmados?: string[]) {
     setTrabajando(true);
     setAviso(null);
     setProblema(false);
@@ -48,7 +53,9 @@ export default function BotonSincronizar() {
       const res = await fetch("/api/leads/sincronizar-crm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ forzar }),
+        body: JSON.stringify(
+          confirmados ? { forzar: true, ids: confirmados } : { forzar: false },
+        ),
       });
 
       // Si no es JSON —un 405, un 502 del proxy— `json()` lanza y el catch
@@ -80,6 +87,9 @@ export default function BotonSincronizar() {
           `${datos.comprobados ?? 0} comprobados · ` +
             `${datos.eliminados ?? 0} ya no están en el CRM` +
             (datos.omitidos ? ` · ${datos.omitidos} sin respuesta, se reintentan mañana` : "") +
+            (datos.aplazados
+              ? ` · ${datos.aplazados} sin mirar por falta de tiempo, van primero la próxima vez`
+              : "") +
             (b ? ` · borradores: ${b.comprobados} comprobados, ${b.eliminados} marcados` : ""),
         );
       }
@@ -114,7 +124,11 @@ export default function BotonSincronizar() {
             <button className="boton-fantasma" onClick={() => setPendientes([])} disabled={trabajando}>
               Revisar primero
             </button>
-            <button className="boton-fantasma" onClick={() => sincronizar(true)} disabled={trabajando}>
+            <button
+              className="boton-fantasma"
+              onClick={() => sincronizar(pendientes.map((p) => p.id))}
+              disabled={trabajando}
+            >
               Sí, están borrados
             </button>
           </div>

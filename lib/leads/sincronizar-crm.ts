@@ -45,15 +45,40 @@
  *  3. Una persona puede confirmarlo. Si el freno salta desde el botón, se
  *     devuelve la lista de empresas afectadas y el botón ofrece «Sí, están
  *     borrados». Esa segunda pasada vuelve a preguntar a GHL —no se fía de la
- *     primera— y solo se salta el porcentaje. El cron nunca fuerza.
+ *     primera— y solo se salta el freno para los ids que esa persona vio en
+ *     pantalla. Un 404 nuevo que no estaba en la lista no se ha confirmado:
+ *     se deja sin marcar y vuelve como pendiente. El cron nunca fuerza.
+ *
+ * ── El tiempo ────────────────────────────────────────────────────────────
+ *
+ * La función tiene 60 s de vida. Si se agotan a mitad del bucle, Vercel la
+ * mata antes de escribir nada, `comprobado_en` no avanza y la ejecución
+ * siguiente choca contra los mismos leads lentos: el mismo corte, todos los
+ * días. Por eso se deja de preguntar a GHL al pasar `LIMITE_LEADS_MS` (y
+ * `LIMITE_TOTAL_MS` con los borradores) y se escribe lo comprobado. Lo que no
+ * dio tiempo a mirar sigue al frente de la cola para la próxima.
  */
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ghl, GhlError } from "@/lib/ghl/client";
 
 /** Leads por ejecución. Con el índice de `comprobado_en` la cola rota sola:
- *  los que llevan más tiempo sin mirarse entran primero. */
+ *  los que llevan más tiempo sin mirarse entran primero. Es un tope de
+ *  lectura; el que manda de verdad es el presupuesto de tiempo. */
 const POR_EJECUCION = 200;
+
+/** A partir de aquí no se empieza a comprobar ningún lead más. Deja al menos
+ *  diez segundos a los borradores para que no se queden sin turno nunca. */
+const LIMITE_LEADS_MS = 20_000;
+
+/** Ídem para los borradores, contado desde el inicio de la ejecución. */
+const LIMITE_TOTAL_MS = 30_000;
+
+/** Límite por llamada a GHL. Más corto que el de `ghl()` por defecto: con el
+ *  reintento del 429 una comprobación puede tardar el doble, y la última que
+ *  empiece antes de `LIMITE_TOTAL_MS` tiene que acabar muy por debajo de los
+ *  60 s de `maxDuration`, escrituras incluidas. */
+const LIMITE_LLAMADA_MS = 8_000;
 
 /** Proporción de 404 a partir de la cual se aborta sin escribir. */
 const UMBRAL_ABORTO = 0.3;
@@ -77,6 +102,9 @@ export type ResultadoSync = {
   restaurados: number;
   /** Ni vivos ni borrados: fallos transitorios que se reintentan mañana. */
   omitidos: number;
+  /** Leads y borradores que no se llegaron a mirar por el presupuesto de
+   *  tiempo. No se tocan: entran los primeros en la próxima ejecución. */
+  aplazados: number;
   /** Desglose por tabla, para saber de dónde salió cada número. */
   borradores: { comprobados: number; eliminados: number };
   /** Motivo por el que se cortó, si se cortó. Null = ejecución completa. */
@@ -100,7 +128,9 @@ type Estado = "vivo" | "no_existe" | "omitido";
  */
 async function comprobar(ruta: string): Promise<Estado> {
   try {
-    await ghl(ruta);
+    // Un corte por tiempo llega como `Error` normal, no `GhlError`: cae en
+    // «omitido» abajo, que es lo que es.
+    await ghl(ruta, { timeoutMs: LIMITE_LLAMADA_MS });
     return "vivo";
   } catch (e) {
     if (!(e instanceof GhlError)) return "omitido";
@@ -117,10 +147,28 @@ async function comprobar(ruta: string): Promise<Estado> {
   }
 }
 
+/**
+ * Corta la ejecución si Supabase no ha guardado. Sin esto, el resultado
+ * contaría como marcados leads que siguen igual en la base de datos, y el
+ * botón diría «hecho» sobre algo que no ha pasado.
+ */
+function exigirEscritura(error: { message: string } | null, que: string) {
+  if (error) {
+    throw new Error(
+      `No se pudo guardar ${que}: ${error.message}. Puede que parte de la ` +
+        `comprobación sí se guardara; la próxima ejecución completa el resto.`,
+    );
+  }
+}
+
 export async function sincronizarLeadsConCrm(
-  opciones: { forzar?: boolean } = {},
+  opciones: { forzar?: boolean; confirmados?: string[] } = {},
 ): Promise<ResultadoSync> {
   const { forzar = false } = opciones;
+  // Con `forzar`, solo cuenta como confirmado lo que la persona vio. Sin
+  // lista no se confirma nada, aunque llegue `forzar`.
+  const confirmados = new Set(forzar ? (opciones.confirmados ?? []) : []);
+  const inicio = Date.now();
   const admin = createAdminClient();
 
   // Solo los que llegaron a existir en GHL. Un lead con `resultado = 'error'`
@@ -141,8 +189,16 @@ export async function sincronizarLeadsConCrm(
   const noExisten: string[] = [];
   const vivos: string[] = [];
   let omitidos = 0;
+  let aplazados = 0;
 
-  for (const lead of leads) {
+  for (const [i, lead] of leads.entries()) {
+    // Sin tiempo: lo que queda no se mira ni se toca. Conserva su
+    // `comprobado_en` viejo y por eso entra primero la próxima vez.
+    if (Date.now() - inicio > LIMITE_LEADS_MS) {
+      aplazados = leads.length - i;
+      break;
+    }
+
     const ruta = lead.ghl_oportunidad_id
       ? `/opportunities/${lead.ghl_oportunidad_id}`
       : lead.ghl_contacto_id
@@ -165,6 +221,7 @@ export async function sincronizarLeadsConCrm(
         eliminados: 0,
         restaurados: 0,
         omitidos,
+        aplazados: 0,
         borradores: { comprobados: 0, eliminados: 0 },
         abortado: e instanceof Error ? e.message : "Error desconocido",
         frenado: false,
@@ -191,24 +248,42 @@ export async function sincronizarLeadsConCrm(
   const siguenBorrados = noExisten.filter((id) => marcadoAntes.has(id));
   const activosComprobados = comprobados - siguenBorrados.length;
 
-  const frenado =
-    !forzar &&
-    activosComprobados >= MINIMO_PARA_FRENO &&
-    nuevos404.length / activosComprobados > UMBRAL_ABORTO;
+  // Qué se marca y qué se queda esperando a una persona.
+  //  - Sin forzar: el freno del porcentaje decide sobre todos a la vez.
+  //  - Forzando: se marcan solo los confirmados. El resto de 404 nuevos no
+  //    los ha visto nadie, así que vuelven como pendientes para confirmar.
+  let aMarcar: string[];
+  let sinConfirmar: string[];
+  if (forzar) {
+    aMarcar = nuevos404.filter((id) => confirmados.has(id));
+    sinConfirmar = nuevos404.filter((id) => !confirmados.has(id));
+  } else {
+    const saltaFreno =
+      activosComprobados >= MINIMO_PARA_FRENO &&
+      nuevos404.length / activosComprobados > UMBRAL_ABORTO;
+    aMarcar = saltaFreno ? [] : nuevos404;
+    sinConfirmar = saltaFreno ? nuevos404 : [];
+  }
+  const frenado = sinConfirmar.length > 0;
 
   /* --- Escritura ---------------------------------------------------- */
 
-  if (!frenado && nuevos404.length > 0) {
-    await admin
+  if (aMarcar.length > 0) {
+    const { error } = await admin
       .from("leads")
       .update({ eliminado_en: ahora, comprobado_en: ahora })
-      .in("id", nuevos404);
+      .in("id", aMarcar);
+    exigirEscritura(error, "la marca de borrado de los leads");
   }
 
   // Los que ya estaban marcados y siguen sin existir: solo se apunta que se
   // han mirado, para que la cola rote. La fecha de borrado no se toca.
   if (siguenBorrados.length > 0) {
-    await admin.from("leads").update({ comprobado_en: ahora }).in("id", siguenBorrados);
+    const { error } = await admin
+      .from("leads")
+      .update({ comprobado_en: ahora })
+      .in("id", siguenBorrados);
+    exigirEscritura(error, "la comprobación de los leads ya borrados");
   }
 
   // Los vivos se marcan como comprobados. Y si alguno estaba marcado como
@@ -219,24 +294,28 @@ export async function sincronizarLeadsConCrm(
   const restaurados = vivos.filter((id) => marcadoAntes.has(id)).length;
 
   if (vivos.length > 0) {
-    await admin
+    const { error } = await admin
       .from("leads")
       .update({ eliminado_en: null, comprobado_en: ahora })
       .in("id", vivos);
+    exigirEscritura(error, "la comprobación de los leads vivos");
   }
 
-  const pendientes: Pendiente[] = frenado
-    ? leads
-        .filter((l) => nuevos404.includes(l.id))
-        .map((l) => ({ id: l.id, empresa: l.empresa ?? null }))
-    : [];
+  const pendientes: Pendiente[] = leads
+    .filter((l) => sinConfirmar.includes(l.id))
+    .map((l) => ({ id: l.id, empresa: l.empresa ?? null }));
 
-  const avisoFreno = frenado
-    ? `${nuevos404.length} de ${activosComprobados} leads activos han devuelto 404, ` +
-      `más del ${Math.round(UMBRAL_ABORTO * 100)}% permitido, así que no se ha ` +
-      `marcado ninguno por precaución. Si los has borrado tú en el CRM, confírmalo ` +
-      `y se marcarán.`
-    : null;
+  const avisoFreno = !frenado
+    ? null
+    : forzar
+      ? `Se han marcado los ${aMarcar.length} leads confirmados, pero ` +
+        `${sinConfirmar.length} más han devuelto 404 y no estaban en la lista ` +
+        `que confirmaste, así que no se han tocado. Si también los has borrado ` +
+        `tú en el CRM, confírmalos.`
+      : `${nuevos404.length} de ${activosComprobados} leads activos han devuelto 404, ` +
+        `más del ${Math.round(UMBRAL_ABORTO * 100)}% permitido, así que no se ha ` +
+        `marcado ninguno por precaución. Si los has borrado tú en el CRM, confírmalo ` +
+        `y se marcarán.`;
 
   /* --- Borradores ---------------------------------------------------- */
 
@@ -244,13 +323,14 @@ export async function sincronizarLeadsConCrm(
   // oportunidad, solo contacto, y su fila no es auditoría de nada. Pero el
   // problema es el mismo —si el contacto se borra en GHL, el borrador se
   // queda para siempre en «Sin terminar»— y la regla también: solo el 404.
-  const borradores = await sincronizarBorradores();
+  const borradores = await sincronizarBorradores(inicio);
 
   return {
     comprobados: comprobados + borradores.comprobados,
-    eliminados: (frenado ? 0 : nuevos404.length) + borradores.eliminados,
+    eliminados: aMarcar.length + borradores.eliminados,
     restaurados,
     omitidos: omitidos + borradores.omitidos,
+    aplazados: aplazados + borradores.aplazados,
     borradores: { comprobados: borradores.comprobados, eliminados: borradores.eliminados },
     // Credenciales manda sobre el freno: si el token falló en los
     // borradores, eso es lo primero que hay que arreglar.
@@ -269,30 +349,54 @@ export async function sincronizarLeadsConCrm(
  * marcado por error no destruye nada —el contacto sigue en GHL y el lead
  * nunca llegó a existir— y basta con quitar la fecha para recuperarlo. El
  * corte por credenciales sí se mantiene, que es el que importa.
+ *
+ * Los fallos de Supabase aquí se devuelven en `abortado` en vez de lanzarse:
+ * a estas alturas los leads ya están escritos, y lanzar convertiría la
+ * respuesta entera en un 502 que escondería lo que sí se guardó.
  */
-async function sincronizarBorradores(): Promise<{
+async function sincronizarBorradores(inicio: number): Promise<{
   comprobados: number;
   eliminados: number;
   omitidos: number;
+  aplazados: number;
   abortado: string | null;
 }> {
   const admin = createAdminClient();
   const ahora = new Date().toISOString();
 
-  const { data } = await admin
+  // Mismo orden que los leads: sin él, la consulta devuelve siempre los
+  // mismos doscientos y los demás no se comprobarían nunca.
+  const { data, error } = await admin
     .from("leads_borrador")
     .select("uuid, ghl_contacto_id")
     .is("eliminado_en", null)
     .not("ghl_contacto_id", "is", null)
+    .order("comprobado_en", { ascending: true, nullsFirst: true })
     .limit(POR_EJECUCION);
+
+  if (error) {
+    return {
+      comprobados: 0,
+      eliminados: 0,
+      omitidos: 0,
+      aplazados: 0,
+      abortado: `No se pudieron leer los borradores: ${error.message}`,
+    };
+  }
 
   const filas = data ?? [];
 
   const noExisten: string[] = [];
   const vivos: string[] = [];
   let omitidos = 0;
+  let aplazados = 0;
 
-  for (const fila of filas) {
+  for (const [i, fila] of filas.entries()) {
+    if (Date.now() - inicio > LIMITE_TOTAL_MS) {
+      aplazados = filas.length - i;
+      break;
+    }
+
     let estado: Estado;
     try {
       estado = await comprobar(`/contacts/${fila.ghl_contacto_id}`);
@@ -301,6 +405,7 @@ async function sincronizarBorradores(): Promise<{
         comprobados: vivos.length + noExisten.length,
         eliminados: 0,
         omitidos,
+        aplazados: 0,
         abortado: e instanceof Error ? e.message : "Error desconocido",
       };
     }
@@ -313,20 +418,42 @@ async function sincronizarBorradores(): Promise<{
   }
 
   if (noExisten.length > 0) {
-    await admin
+    const { error } = await admin
       .from("leads_borrador")
       .update({ eliminado_en: ahora, comprobado_en: ahora })
       .in("uuid", noExisten);
+    if (error) {
+      return {
+        comprobados: vivos.length + noExisten.length,
+        eliminados: 0,
+        omitidos,
+        aplazados,
+        abortado: `No se pudo guardar la marca de borrado de los borradores: ${error.message}`,
+      };
+    }
   }
 
   if (vivos.length > 0) {
-    await admin.from("leads_borrador").update({ comprobado_en: ahora }).in("uuid", vivos);
+    const { error } = await admin
+      .from("leads_borrador")
+      .update({ comprobado_en: ahora })
+      .in("uuid", vivos);
+    if (error) {
+      return {
+        comprobados: vivos.length + noExisten.length,
+        eliminados: noExisten.length,
+        omitidos,
+        aplazados,
+        abortado: `No se pudo guardar la comprobación de los borradores: ${error.message}`,
+      };
+    }
   }
 
   return {
     comprobados: vivos.length + noExisten.length,
     eliminados: noExisten.length,
     omitidos,
+    aplazados,
     abortado: null,
   };
 }

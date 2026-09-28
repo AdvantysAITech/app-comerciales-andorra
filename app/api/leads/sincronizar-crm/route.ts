@@ -15,13 +15,22 @@ import { sesionActual } from "@/lib/permisos";
 
 export const runtime = "nodejs";
 
-// Doscientas llamadas con pausa de 120 ms son unos 25 segundos. El margen
-// cubre las que tarden más de la cuenta.
+// La sincronización deja de preguntar a GHL a los 30 s (ver `LIMITE_TOTAL_MS`
+// en lib/leads/sincronizar-crm.ts). El resto del margen es para la última
+// llamada en curso y las escrituras.
 export const maxDuration = 60;
 
+/** Tope de ids confirmados. El botón manda como mucho los que devolvió una
+ *  pasada, que lee 200 leads; lo demás es un cuerpo que no viene del botón. */
+const MAX_CONFIRMADOS = 500;
+
 export async function POST(request: Request) {
+  // Sin secreto configurado no hay cron que valga. Si no se comprueba, la
+  // cabecera `Bearer undefined` coincidiría con la plantilla y cualquiera
+  // entraría como cron, sin sesión.
+  const secreto = process.env.CRON_SECRET;
   const esCron =
-    request.headers.get("authorization") === `Bearer ${process.env.CRON_SECRET}`;
+    !!secreto && request.headers.get("authorization") === `Bearer ${secreto}`;
 
   if (!esCron) {
     // A mano solo con alcance sobre los leads de otros: la comprobación
@@ -38,18 +47,42 @@ export async function POST(request: Request) {
     }
   }
 
-  // `forzar` salta el freno del porcentaje tras confirmarlo una persona desde
-  // el botón. Solo se acepta con sesión: el cron no confirma nada, y si GHL
-  // empieza a devolver 404 de madrugada, el freno tiene que actuar.
+  // `forzar` salta el freno tras confirmarlo una persona desde el botón, y
+  // SOLO para los ids que esa persona tenía en pantalla (`ids`). Solo se
+  // acepta con sesión: el cron no confirma nada, y si GHL empieza a devolver
+  // 404 de madrugada, el freno tiene que actuar.
   let forzar = false;
+  let confirmados: string[] = [];
   if (!esCron) {
-    const cuerpo = (await request.json().catch(() => null)) as { forzar?: unknown } | null;
+    const cuerpo = (await request.json().catch(() => null)) as
+      | { forzar?: unknown; ids?: unknown }
+      | null;
     forzar = cuerpo?.forzar === true;
+
+    if (forzar) {
+      const ids = cuerpo?.ids;
+      const valido =
+        Array.isArray(ids) &&
+        ids.length > 0 &&
+        ids.length <= MAX_CONFIRMADOS &&
+        ids.every((id) => typeof id === "string" && id.length > 0 && id.length <= 64);
+      if (!valido) {
+        return NextResponse.json(
+          { error: "Confirmación sin lista de leads válida. Vuelve a comprobar." },
+          { status: 400 },
+        );
+      }
+      confirmados = ids as string[];
+    }
   }
 
   try {
-    const resultado = await sincronizarLeadsConCrm({ forzar });
-    if (forzar) console.warn("[sync-leads] freno saltado con confirmación manual");
+    const resultado = await sincronizarLeadsConCrm({ forzar, confirmados });
+    if (forzar) {
+      console.warn(
+        `[sync-leads] freno saltado con confirmación manual para ${confirmados.length} leads`,
+      );
+    }
 
     if (resultado.abortado) {
       console.error("[sync-leads] ejecución abortada", resultado.abortado);
@@ -58,6 +91,7 @@ export async function POST(request: Request) {
         `[sync-leads] ${resultado.comprobados} comprobados · ` +
           `${resultado.eliminados} marcados como borrados · ` +
           `${resultado.omitidos} omitidos · ` +
+          `${resultado.aplazados} aplazados por tiempo · ` +
           `borradores: ${resultado.borradores.comprobados} comprobados, ` +
           `${resultado.borradores.eliminados} marcados`,
       );

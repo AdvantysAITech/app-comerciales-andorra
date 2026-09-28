@@ -5,8 +5,11 @@ import { getUsuarioSesion } from "@/lib/supabase/route-auth";
 /** Refresco de la caché. Dos entradas: un usuario con sesión (botón manual)
  *  o el cron de Vercel con su cabecera de autorización. */
 export async function POST(request: Request) {
+  // Sin secreto configurado no hay cron que valga: si no, `Bearer undefined`
+  // coincidiría con la plantilla y entraría cualquiera sin sesión.
+  const secreto = process.env.CRON_SECRET;
   const esCron =
-    request.headers.get("authorization") === `Bearer ${process.env.CRON_SECRET}`;
+    !!secreto && request.headers.get("authorization") === `Bearer ${secreto}`;
 
   if (!esCron && !(await getUsuarioSesion())) {
     return NextResponse.json({ error: "Sesión caducada" }, { status: 401 });
