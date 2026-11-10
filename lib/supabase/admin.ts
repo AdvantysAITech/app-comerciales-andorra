@@ -1,21 +1,14 @@
+import 'server-only'
 import { createClient } from '@supabase/supabase-js'
+import { supabaseClaveSecreta, supabaseUrl } from '@/lib/supabase/env'
 
 /**
- * Cliente con service_role. SOLO servidor.
+ * Cliente con la clave secreta (o service_role antigua). SOLO servidor.
  * Salta RLS: es la única vía de acceso a google_conexiones,
  * que deliberadamente no tiene políticas.
  */
 export function createAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!url || !key) {
-    throw new Error(
-      'Faltan NEXT_PUBLIC_SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY',
-    )
-  }
-
-  return createClient(url, key, {
+  return createClient(supabaseUrl(), supabaseClaveSecreta(), {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 }

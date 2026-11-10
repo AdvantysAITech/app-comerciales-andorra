@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { supabaseClavePublica, supabaseUrl } from "@/lib/supabase/env";
 
 // Rutas que se autentican solas: el cron de Vercel llega sin cookie de
 // sesión, y sin esto el middleware lo redirigiría al login.
@@ -15,8 +16,8 @@ export async function middleware(request: NextRequest) {
   let respuesta = NextResponse.next({ request });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl(),
+    supabaseClavePublica(),
     {
       cookies: {
         getAll: () => request.cookies.getAll(),

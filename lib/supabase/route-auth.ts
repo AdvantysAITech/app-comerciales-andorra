@@ -1,6 +1,7 @@
 import 'server-only'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
+import { supabaseClavePublica, supabaseUrl } from "@/lib/supabase/env";
 
 /**
  * Cliente Supabase con la sesión del usuario, para Route Handlers.
@@ -10,8 +11,8 @@ export async function getSupabaseRoute() {
   const cookieStore = await cookies()
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl(),
+    supabaseClavePublica(),
     {
       cookies: {
         getAll: () => cookieStore.getAll(),
